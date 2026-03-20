@@ -1,16 +1,31 @@
-## Hi there 👋
+# AnimFrame
 
-<!--
-**animframe/animframe** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+A free frame-by-frame vector animation tool that runs in your browser. No download, no account, no nonsense.
 
-Here are some ideas to get you started:
+**[Try it live →](https://animframe.com)**
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+## What it does
+
+- 6 brush types (smooth, sketchy, rough, hairy, dotted, stipple) with taper and pressure sensitivity
+- Layers with opacity, drag reorder, and rename
+- Onion skinning with custom colours and range
+- Flood fill (paint bucket)
+- Selection tool — move, scale, rotate, recolour paths
+- Video and image import for rotoscoping
+- Export as GIF, MP4, PNG sequence
+- Apple Pencil support with palm rejection
+- Dark mode
+- Keyboard shortcuts for everything
+- Saves to your browser automatically
+
+## Run it
+
+Open `index.html`. That's it. No build step, no dependencies, no server.
+
+## Tech
+
+Pure HTML, CSS, and vanilla JS. All vector (SVG). Everything runs client-side - nothing leaves your browser.
+
+## License
+
+MIT
