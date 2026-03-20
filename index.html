@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AnimFrame</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- gifshot library for reliable client-side GIF encoding without workers -->
+    <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/mp4-muxer@5.1.1/build/mp4-muxer.min.js"></script>
+</head>
+<body>
+    <!-- Minimal Top Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <span class="app-name">AnimFrame</span>
+            <div class="canvas-size-selector">
+                <label class="canvas-size-label">Canvas</label>
+                <select id="canvasSizeSelect" class="canvas-size-select">
+                    <option value="600x600" selected>600×600</option>
+                    <option value="1280x720">1280×720 (HD)</option>
+                    <option value="1920x1080">1920×1080 (FHD)</option>
+                    <option value="1080x1920">1080×1920 (Vertical HD)</option>
+                    <option value="custom">Custom...</option>
+                </select>
+            </div>
+            <div class="fps-selector">
+                <label class="fps-label">FPS</label>
+                <select id="fpsSelect" class="fps-select">
+                    <option value="8">8</option>
+                    <option value="12" selected>12</option>
+                    <option value="15">15</option>
+                    <option value="24">24</option>
+                    <option value="30">30</option>
+                    <option value="60">60</option>
+                </select>
+            </div>
+        </div>
+        <div class="header-right">
+            <span id="autoSaveIndicator" class="auto-save-indicator">Auto-saved</span>
+            <div class="export-menu-container">
+                <button id="exportMenuBtn" class="header-btn">
+                    Export
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div id="exportMenu" class="export-menu" style="display: none;">
+                    <button id="exportGifBtn" class="export-option">
+                        <span class="export-icon">📊</span>
+                        <span class="export-label">GIF Animation</span>
+                    </button>
+                    <button id="exportPngBtn" class="export-option">
+                        <span class="export-icon">🖼️</span>
+                        <span class="export-label">PNG Sequence (.zip)</span>
+                    </button>
+                    <button id="exportMp4Btn" class="export-option">
+                        <span class="export-icon">🎬</span>
+                        <span class="export-label">MP4 Video</span>
+                    </button>
+                </div>
+            </div>
+            <button id="exportJsonBtn" class="header-btn">Save</button>
+            <button id="importJsonBtn" class="header-btn">Open</button>
+            <button id="newProjectBtn" class="header-btn">New</button>
+            <input type="file" id="fileInput" accept=".json" style="display: none;">
+            <div class="header-divider"></div>
+            <button id="importVideoBtn" class="header-btn">Import Video</button>
+            <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+            <button id="importImagesBtn" class="header-btn">Import Images</button>
+            <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
+            <div class="header-divider"></div>
+            <button id="shortcutsBtn" class="header-btn shortcuts-btn" title="Keyboard Shortcuts (?)">
+                <span class="icon">?</span>
+            </button>
+            <button id="darkModeBtn" class="header-btn shortcuts-btn" title="Toggle Dark Mode">
+                <svg id="darkModeIconLight" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+                    <circle cx="8" cy="8" r="3"/>
+                </svg>
+                <svg id="darkModeIconDark" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none">
+                    <path d="M13.5 8.5a5.5 5.5 0 0 1-7-7 5.5 5.5 0 1 0 7 7z"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="workspace">
+        <!-- Left: Drawing Tools Only -->
+        <aside class="tool-column">
+            <div class="tool-section">
+                <button id="penTool" class="tool-btn active" title="Pen (B)">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M12.5 3.5l4 4L7 17H3v-4L12.5 3.5z"/>
+                        <path d="M10.5 5.5l4 4" stroke-width="1"/>
+                    </svg>
+                    <span class="tool-label">Pen</span>
+                </button>
+                <div class="brush-type-selector">
+                    <select id="brushType" class="brush-select" title="Brush Style">
+                        <option value="smooth">Smooth</option>
+                        <option value="sketchy">Sketchy</option>
+                        <option value="rough">Rough</option>
+                        <option value="hairy">Hairy</option>
+                        <option value="dotted">Dotted</option>
+                        <option value="stipple">Stipple</option>
+                    </select>
+                </div>
+                <button id="eraserTool" class="tool-btn" title="Eraser (E)">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M16 8l-5 5-4.5 4H3l-0.5-0.5L7 12l5-5z"/>
+                        <path d="M7 12l4.5 4.5" stroke-width="1"/>
+                        <rect x="2" y="16.5" width="10" height="1" rx="0.5" fill="currentColor" stroke="none" opacity="0.3"/>
+                    </svg>
+                    <span class="tool-label">Eraser</span>
+                </button>
+                <button id="selectTool" class="tool-btn" title="Select (V)">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 2l10 7-4 1 3 6-2 1-3-6-4 3z" fill="currentColor" stroke="none"/>
+                    </svg>
+                    <span class="tool-label">Select</span>
+                </button>
+                <button id="zoomTool" class="tool-btn" title="Zoom (Z)">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="9" r="6"/>
+                        <path d="M13.5 13.5L17 17"/>
+                        <path d="M7 9h4M9 7v4" stroke-width="1.5"/>
+                    </svg>
+                    <span class="tool-label">Zoom</span>
+                </button>
+                <button id="fillTool" class="tool-btn" title="Fill (G)">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M14 3l-8 8-2 5 5-2 8-8z"/>
+                        <path d="M3 17h5" stroke-linecap="round"/>
+                        <path d="M15 10c0 0 3 3 3 5a2.5 2.5 0 0 1-5 0c0-2 2-5 2-5z" fill="currentColor" opacity="0.3"/>
+                    </svg>
+                    <span class="tool-label">Fill</span>
+                </button>
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-section">
+                <button id="clearBtn" class="tool-btn clear-btn" title="Clear Canvas">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 7h12M7 7V4a1 1 0 011-1h4a1 1 0 011 1v3M5 7l1 10a1 1 0 001 1h6a1 1 0 001-1l1-10"/>
+                    </svg>
+                    <span class="tool-label">Clear</span>
+                </button>
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-section slider-section">
+                <div class="v-slider-item">
+                    <span class="slider-label">Size</span>
+                    <input type="range" id="sizeSlider" min="1" max="20" step="1" value="2" class="h-slider" title="Brush Size">
+                    <span id="sizeValue" class="slider-val">2</span>
+                </div>
+                <div class="v-slider-item">
+                    <span class="slider-label">Taper</span>
+                    <input type="range" id="taperSlider" min="0" max="100" step="5" value="0" class="h-slider" title="Stroke Taper">
+                    <span id="taperValue" class="slider-val">0%</span>
+                </div>
+                <div class="v-slider-item">
+                    <span class="slider-label">Smooth</span>
+                    <input type="range" id="smoothingSlider" min="0.5" max="8" step="0.5" value="3" class="h-slider" title="Stroke Smoothing">
+                    <span id="smoothingValue" class="slider-val">Med</span>
+                </div>
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-section">
+                <span class="section-label">Color</span>
+                <input type="color" id="colorPicker" value="#000000" class="color-picker" title="Color">
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-section">
+                <span class="section-label">BG</span>
+                <input type="color" id="backgroundColorPicker" value="#ffffff" class="color-picker" title="Background Color">
+            </div>
+
+            <div class="tool-divider"></div>
+
+            <div class="tool-section">
+                <span class="section-label">Alpha</span>
+                <label class="alpha-toggle">
+                    <input type="checkbox" id="transparentBgToggle">
+                </label>
+            </div>
+
+            <!-- Constraint button hidden for now - re-add in later version -->
+        </aside>
+
+        <!-- Center: Canvas -->
+        <main class="canvas-zone">
+            <svg id="mainSvg" width="600" height="600" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+                <rect id="backgroundRect" width="100%" height="100%" fill="#ffffff"/>
+                <g id="onionSkinLayer" opacity="0.3"></g>
+                <g id="layersContainer"></g>
+                <g id="selectionOverlay"></g>
+            </svg>
+            <div class="zoom-bar">
+                <button id="zoomResetBtn" class="zoom-label-btn" title="Reset Zoom (0)"><span id="zoomLabel">100%</span></button>
+            </div>
+            <div id="zoomHint" class="zoom-hint" style="display: none;">
+                <span>Click to zoom in · Shift+click to zoom out · Drag to pan</span>
+                <button id="zoomResetHintBtn" class="zoom-reset-hint-btn">Reset View</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Bottom: Timeline Panel (ALL frame/playback/layer controls) -->
+    <section class="timeline-panel">
+        <!-- Timeline Controls Row -->
+        <div class="timeline-controls">
+            <div class="control-group">
+                <label class="frame-label">Frame</label>
+                <span id="frameCounter" class="frame-counter">1/1</span>
+            </div>
+
+            <div class="control-group">
+                <button id="playBtn" class="timeline-btn primary" title="Play/Stop">
+                    <span class="icon">▶</span>
+                </button>
+            </div>
+
+            <div class="control-group onion-skin-group">
+                <button id="onionSkinToggle" class="timeline-btn" title="Onion Skin (O)">
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="10" cy="10" r="7" opacity="0.3"/>
+                        <circle cx="10" cy="10" r="4"/>
+                    </svg>
+                </button>
+                <button id="onionSkinSettings" class="timeline-btn settings-btn" title="Onion Skin Settings">
+                    <span class="icon">▼</span>
+                </button>
+                
+                <!-- Onion Skin Settings Panel (hidden by default) -->
+                <div id="onionSkinPanel" class="onion-skin-panel" style="display: none;">
+                    <div class="onion-setting">
+                        <label>Frames Before</label>
+                        <input type="number" id="onionBefore" min="0" max="5" value="1">
+                    </div>
+                    <div class="onion-setting">
+                        <label>Frames After</label>
+                        <input type="number" id="onionAfter" min="0" max="5" value="1">
+                    </div>
+                    <div class="onion-setting">
+                        <label>Previous Opacity</label>
+                        <input type="range" id="onionBeforeOpacity" min="0" max="100" value="30">
+                        <span class="opacity-value">30%</span>
+                    </div>
+                    <div class="onion-setting">
+                        <label>Next Opacity</label>
+                        <input type="range" id="onionAfterOpacity" min="0" max="100" value="30">
+                        <span class="opacity-value">30%</span>
+                    </div>
+                    <div class="onion-setting">
+                        <label>Previous Color</label>
+                        <input type="color" id="onionBeforeColor" value="#ff6b6b">
+                    </div>
+                    <div class="onion-setting">
+                        <label>Next Color</label>
+                        <input type="color" id="onionAfterColor" value="#4dabf7">
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="addFrameBtn" class="timeline-btn" title="Add Frame">
+                    <span class="icon">+</span>
+                </button>
+                <button id="duplicateFrameBtn" class="timeline-btn" title="Duplicate Frame">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+                        <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+                    </svg>
+                </button>
+                <button id="deleteFrameBtn" class="timeline-btn" title="Delete Frame">
+                    <span class="icon">×</span>
+                </button>
+            </div>
+
+            <div class="control-group">
+                <button id="copyFrameBtn" class="timeline-btn" title="Copy Frame (Ctrl+C)">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="1.5" width="8" height="10" rx="1.5"/>
+                        <path d="M7 14.5h5.5a2 2 0 0 0 0-4H9"/>
+                        <path d="M11 8.5l2 2-2 2"/>
+                    </svg>
+                </button>
+                <button id="pasteFrameBtn" class="timeline-btn" title="Paste Frame (Ctrl+V)">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.5 2.5H12A1.5 1.5 0 0 1 13.5 4v9A1.5 1.5 0 0 1 12 14.5H4A1.5 1.5 0 0 1 2.5 13V4A1.5 1.5 0 0 1 4 2.5H5.5"/>
+                        <rect x="5.5" y="1" width="5" height="3" rx="1"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="control-group undo-redo-group">
+                <button id="undoBtn" class="timeline-btn" title="Undo (Ctrl+Z)">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h7a4 4 0 0 1 0 8H7"/>
+                        <path d="M6 3L3 6l3 3"/>
+                    </svg>
+                </button>
+                <button id="redoBtn" class="timeline-btn" title="Redo (Ctrl+Shift+Z)">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M13 6H6a4 4 0 0 0 0 8h3"/>
+                        <path d="M10 3l3 3-3 3"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Frame Strip -->
+        <div class="timeline-content">
+            <!-- Layers Section -->
+            <div class="layers-section">
+                <div id="layerList" class="layer-list">
+                    <!-- Layer items inserted here -->
+                </div>
+                <div class="layer-actions">
+                    <button id="addLayerBtn" class="add-layer-btn" title="Add Layer">
+                        <span class="icon">+</span>
+                        <span class="label">New Layer</span>
+                    </button>
+                    <button id="duplicateLayerBtn" class="add-layer-btn duplicate-layer-btn" title="Duplicate Current Layer">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+                            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H3.5A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+                        </svg>
+                        <span class="label">Duplicate</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="frames-section">
+                <div class="frame-scrub-bar" id="frameScrubBar" title="Drag to scrub through frames">
+                    <div class="frame-scrub-handle" id="frameScrubHandle"></div>
+                </div>
+                <div class="frames-scroll" id="frameList">
+                    <!-- Frame thumbnails inserted here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Modal Dialog -->
+    <div id="modal" class="modal" style="display: none;">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Title</h3>
+                <button class="modal-close" id="modalCloseBtn">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content inserted dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn secondary" id="modalCancelBtn">Cancel</button>
+                <button class="modal-btn primary" id="modalConfirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Panel -->
+    <div id="shortcutsPanel" class="shortcuts-panel" style="display: none;">
+        <div class="shortcuts-backdrop"></div>
+        <div class="shortcuts-dialog">
+            <div class="shortcuts-header">
+                <h3>Keyboard Shortcuts</h3>
+                <button class="shortcuts-close" id="shortcutsCloseBtn">&times;</button>
+            </div>
+            <div class="shortcuts-body">
+                <div class="shortcuts-group">
+                    <h4>Tools</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>B</kbd></span><span class="shortcut-desc">Pen / Brush</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>E</kbd></span><span class="shortcut-desc">Eraser</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>V</kbd></span><span class="shortcut-desc">Select</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Z</kbd></span><span class="shortcut-desc">Zoom (click to zoom in, Shift+click to zoom out)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>G</kbd></span><span class="shortcut-desc">Fill tool</span></div>
+                </div>
+                <div class="shortcuts-group">
+                    <h4>Drawing</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Shift</kbd> + drag</span><span class="shortcut-desc">Straight lines / circles</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Alt</kbd> + drag</span><span class="shortcut-desc">Force circle mode</span></div>
+                </div>
+                <div class="shortcuts-group">
+                    <h4>Selection</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd class="mod">Ctrl</kbd><kbd>A</kbd></span><span class="shortcut-desc">Select all</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Shift</kbd> + click</span><span class="shortcut-desc">Add to selection</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Delete</kbd></span><span class="shortcut-desc">Delete selected</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Esc</kbd></span><span class="shortcut-desc">Deselect</span></div>
+                </div>
+                <div class="shortcuts-group">
+                    <h4>Edit</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd class="mod">Ctrl</kbd><kbd>Z</kbd></span><span class="shortcut-desc">Undo</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd class="mod">Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></span><span class="shortcut-desc">Redo</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd class="mod">Ctrl</kbd><kbd>C</kbd></span><span class="shortcut-desc">Copy frame</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd class="mod">Ctrl</kbd><kbd>V</kbd></span><span class="shortcut-desc">Paste frame</span></div>
+                </div>
+                <div class="shortcuts-group">
+                    <h4>Playback</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Space</kbd></span><span class="shortcut-desc">Play / Stop</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Esc</kbd></span><span class="shortcut-desc">Stop playback</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>,</kbd></span><span class="shortcut-desc">Previous frame</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>.</kbd></span><span class="shortcut-desc">Next frame</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>N</kbd></span><span class="shortcut-desc">New frame</span></div>
+                </div>
+                <div class="shortcuts-group">
+                    <h4>View</h4>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>O</kbd></span><span class="shortcut-desc">Toggle onion skin</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Z</kbd></span><span class="shortcut-desc">Zoom tool</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Import Dialog -->
+    <div id="videoImportPanel" class="shortcuts-panel" style="display: none;">
+        <div class="shortcuts-backdrop" id="videoImportBackdrop"></div>
+        <div class="shortcuts-dialog video-import-dialog">
+            <div class="shortcuts-header">
+                <h3>Import Video as Reference</h3>
+                <button class="shortcuts-close" id="videoImportCloseBtn">&times;</button>
+            </div>
+            <div class="video-import-body">
+                <div class="video-preview-container">
+                    <video id="videoPreview" muted playsinline></video>
+                    <div class="video-preview-placeholder" id="videoPreviewPlaceholder">
+                        Loading video...
+                    </div>
+                </div>
+                <div class="video-trim-controls">
+                    <div class="trim-row">
+                        <label>Start</label>
+                        <input type="range" id="videoTrimStart" min="0" max="100" step="0.1" value="0" class="trim-slider">
+                        <span id="videoTrimStartVal" class="trim-value">0.0s</span>
+                    </div>
+                    <div class="trim-row">
+                        <label>End</label>
+                        <input type="range" id="videoTrimEnd" min="0" max="100" step="0.1" value="100" class="trim-slider">
+                        <span id="videoTrimEndVal" class="trim-value">0.0s</span>
+                    </div>
+                    <div class="trim-row">
+                        <label>FPS</label>
+                        <select id="videoImportFps" class="video-import-select">
+                            <option value="6">6</option>
+                            <option value="8">8</option>
+                            <option value="12" selected>12 (project)</option>
+                            <option value="15">15</option>
+                            <option value="24">24</option>
+                        </select>
+                        <span id="videoFrameEstimate" class="trim-value">0 frames</span>
+                    </div>
+                    <div class="trim-row">
+                        <label>Opacity</label>
+                        <input type="range" id="videoRefOpacity" min="10" max="100" step="5" value="40" class="trim-slider">
+                        <span id="videoRefOpacityVal" class="trim-value">40%</span>
+                    </div>
+                </div>
+                <div class="video-import-info" id="videoImportInfo"></div>
+                <div class="video-import-progress" id="videoImportProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="videoProgressFill"></div>
+                    </div>
+                    <span class="progress-text" id="videoProgressText">Extracting frames...</span>
+                </div>
+                <div class="video-import-actions">
+                    <button class="modal-btn secondary" id="videoImportCancelBtn">Cancel</button>
+                    <button class="modal-btn primary" id="videoImportConfirmBtn">Import Frames</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
