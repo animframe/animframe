@@ -210,8 +210,15 @@ body {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    flex-wrap: wrap; /* Allow wrapping on very small screens */
-    overflow: visible; /* Allow dropdown menu to show */
+    flex-wrap: nowrap;
+    overflow: visible;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.header-right {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 /* Auto-save indicator */
@@ -245,7 +252,9 @@ body {
     gap: 6px;
     transition: all 0.15s ease;
     position: relative;
-    pointer-events: auto; /* Ensure buttons always receive events */
+    pointer-events: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .header-btn .icon {
@@ -268,6 +277,61 @@ body {
     height: 20px;
     background: var(--border);
     margin: 0 var(--space-2);
+    flex-shrink: 0;
+}
+
+/* More menu dropdown */
+.more-menu-container {
+    position: relative;
+}
+
+.more-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: var(--shadow-md);
+    z-index: 1000;
+    min-width: 180px;
+    padding: 4px;
+}
+
+.more-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 4px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.more-option:hover {
+    background: var(--bg-panel);
+}
+
+.more-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.more-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 8px;
 }
 
 /* Export menu dropdown */
@@ -1112,7 +1176,7 @@ body {
 }
 
 .frame-item {
-    min-width: 96px;
+    width: 96px;
     height: 72px;
     background: var(--bg-panel);
     border: 2px solid transparent;
@@ -1138,6 +1202,7 @@ body {
     width: 100%;
     height: 100%;
     display: block;
+    object-fit: contain;
 }
 
 .frame-number {
@@ -1948,7 +2013,7 @@ input:focus:not(:focus-visible) {
     }
     
     .header-right {
-        gap: 2px; /* Tighter button spacing */
+        gap: 2px;
     }
     
     .timeline-controls {
@@ -1994,8 +2059,7 @@ input:focus:not(:focus-visible) {
     }
     
     .app-header {
-        height: 44px; /* Taller for better touch targets */
-        flex-wrap: wrap; /* Allow wrapping if needed */
+        height: 44px;
         min-height: 44px;
         padding: 0 4px;
     }

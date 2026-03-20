@@ -590,11 +590,30 @@ function setupEventListeners() {
     // Restore dark mode preference
     if (localStorage.getItem('animframe-dark-mode') === 'true') {
         document.documentElement.setAttribute('data-theme', 'dark');
-        document.getElementById('darkModeIconLight').style.display = '';
-        document.getElementById('darkModeIconDark').style.display = 'none';
-    } else {
-        document.getElementById('darkModeIconLight').style.display = 'none';
-        document.getElementById('darkModeIconDark').style.display = '';
+        var iconWrap = document.getElementById('darkModeIconWrap');
+        var label = document.getElementById('darkModeLabel');
+        if (iconWrap) iconWrap.textContent = '☀️';
+        if (label) label.textContent = 'Light Mode';
+    }
+    
+    // More menu toggle
+    var moreBtn = document.getElementById('moreMenuBtn');
+    var moreMenu = document.getElementById('moreMenu');
+    if (moreBtn && moreMenu) {
+        moreBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        // Close on click outside
+        document.addEventListener('click', function() {
+            moreMenu.style.display = 'none';
+        });
+        moreMenu.addEventListener('click', function(e) {
+            // Close menu after clicking an option (except file inputs)
+            if (e.target.closest('.more-option')) {
+                setTimeout(function() { moreMenu.style.display = 'none'; }, 100);
+            }
+        });
     }
     
     // Detect Mac and swap modifier labels
@@ -3055,6 +3074,22 @@ function selectFrame(index) {
     updateFrameCounter();
     updateScrubHandle();
     renderFrame();
+    scrollToActiveFrame();
+}
+
+function scrollToActiveFrame() {
+    var frameList = document.getElementById('frameList');
+    if (!frameList) return;
+    var active = frameList.querySelector('.frame-item.active');
+    if (!active) return;
+    
+    var listRect = frameList.getBoundingClientRect();
+    var activeRect = active.getBoundingClientRect();
+    
+    // If the active frame is outside the visible area, scroll to it
+    if (activeRect.left < listRect.left || activeRect.right > listRect.right) {
+        active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
 }
 
 function updateFrameList() {
@@ -3346,6 +3381,7 @@ function startPlayback() {
                 renderFrame();
                 updateFrameList();
                 updateFrameCounter();
+                scrollToActiveFrame();
             } catch (err) {
                 console.error('Playback render error:', err);
                 stopPlayback();
@@ -5871,13 +5907,13 @@ function toggleDarkMode() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     if (isDark) {
         document.documentElement.removeAttribute('data-theme');
-        document.getElementById('darkModeIconLight').style.display = 'none';
-        document.getElementById('darkModeIconDark').style.display = '';
+        document.getElementById('darkModeIconWrap').textContent = '🌙';
+        document.getElementById('darkModeLabel').textContent = 'Dark Mode';
         localStorage.setItem('animframe-dark-mode', 'false');
     } else {
         document.documentElement.setAttribute('data-theme', 'dark');
-        document.getElementById('darkModeIconLight').style.display = '';
-        document.getElementById('darkModeIconDark').style.display = 'none';
+        document.getElementById('darkModeIconWrap').textContent = '☀️';
+        document.getElementById('darkModeLabel').textContent = 'Light Mode';
         localStorage.setItem('animframe-dark-mode', 'true');
     }
 }

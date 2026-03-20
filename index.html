@@ -64,23 +64,26 @@
             <button id="newProjectBtn" class="header-btn">New</button>
             <input type="file" id="fileInput" accept=".json" style="display: none;">
             <div class="header-divider"></div>
-            <button id="importVideoBtn" class="header-btn">Import Video</button>
-            <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
-            <button id="importImagesBtn" class="header-btn">Import Images</button>
-            <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
-            <div class="header-divider"></div>
-            <button id="shortcutsBtn" class="header-btn shortcuts-btn" title="Keyboard Shortcuts (?)">
-                <span class="icon">?</span>
-            </button>
-            <button id="darkModeBtn" class="header-btn shortcuts-btn" title="Toggle Dark Mode">
-                <svg id="darkModeIconLight" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                    <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
-                    <circle cx="8" cy="8" r="3"/>
-                </svg>
-                <svg id="darkModeIconDark" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none">
-                    <path d="M13.5 8.5a5.5 5.5 0 0 1-7-7 5.5 5.5 0 1 0 7 7z"/>
-                </svg>
-            </button>
+            <div class="more-menu-container">
+                <button id="moreMenuBtn" class="header-btn">More <span class="dropdown-arrow">▼</span></button>
+                <div id="moreMenu" class="more-menu" style="display: none;">
+                    <button id="importVideoBtn" class="more-option">
+                        <span class="more-icon">🎥</span> Import Video
+                    </button>
+                    <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+                    <button id="importImagesBtn" class="more-option">
+                        <span class="more-icon">🖼️</span> Import Images
+                    </button>
+                    <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
+                    <div class="more-divider"></div>
+                    <button id="shortcutsBtn" class="more-option shortcuts-btn">
+                        <span class="more-icon">⌨️</span> Keyboard Shortcuts
+                    </button>
+                    <button id="darkModeBtn" class="more-option">
+                        <span class="more-icon" id="darkModeIconWrap">🌙</span> <span id="darkModeLabel">Dark Mode</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </header>
 
