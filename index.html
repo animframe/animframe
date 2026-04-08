@@ -16,6 +16,27 @@
         <div class="header-left">
             <span class="app-name">AnimFrame</span>
             <button id="aboutBtn" class="about-btn" title="About AnimFrame">About</button>
+            <div class="file-menu-container">
+                <button id="fileMenuBtn" class="header-btn">File <span class="dropdown-arrow">▼</span></button>
+                <div id="fileMenu" class="file-menu" style="display: none;">
+                    <button id="newProjectBtn" class="file-option">New Project</button>
+                    <button id="exportJsonBtn" class="file-option">Save Project</button>
+                    <button id="importJsonBtn" class="file-option">Open Project</button>
+                    <input type="file" id="fileInput" accept=".json" style="display: none;">
+                    <div class="file-divider"></div>
+                    <button id="importVideoBtn" class="file-option">Import Video</button>
+                    <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+                    <button id="importImagesBtn" class="file-option">Import Images</button>
+                    <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
+                    <div class="file-divider"></div>
+                    <button id="exportGifBtn" class="file-option">Export GIF</button>
+                    <button id="exportPngBtn" class="file-option">Export PNG Sequence</button>
+                    <button id="exportMp4Btn" class="file-option">Export MP4 Video</button>
+                    <div class="file-divider"></div>
+                    <button id="shortcutsBtn" class="file-option shortcuts-btn">Keyboard Shortcuts</button>
+                    <button id="darkModeBtn" class="file-option"><span id="darkModeIconWrap">🌙</span> <span id="darkModeLabel">Dark Mode</span></button>
+                </div>
+            </div>
             <div class="canvas-size-selector">
                 <label class="canvas-size-label">Canvas</label>
                 <select id="canvasSizeSelect" class="canvas-size-select">
@@ -40,51 +61,6 @@
         </div>
         <div class="header-right">
             <span id="autoSaveIndicator" class="auto-save-indicator">Auto-saved</span>
-            <div class="export-menu-container">
-                <button id="exportMenuBtn" class="header-btn">
-                    Export
-                    <span class="dropdown-arrow">▼</span>
-                </button>
-                <div id="exportMenu" class="export-menu" style="display: none;">
-                    <button id="exportGifBtn" class="export-option">
-                        <span class="export-icon">📊</span>
-                        <span class="export-label">GIF Animation</span>
-                    </button>
-                    <button id="exportPngBtn" class="export-option">
-                        <span class="export-icon">🖼️</span>
-                        <span class="export-label">PNG Sequence (.zip)</span>
-                    </button>
-                    <button id="exportMp4Btn" class="export-option">
-                        <span class="export-icon">🎬</span>
-                        <span class="export-label">MP4 Video</span>
-                    </button>
-                </div>
-            </div>
-            <button id="exportJsonBtn" class="header-btn">Save</button>
-            <button id="importJsonBtn" class="header-btn">Open</button>
-            <button id="newProjectBtn" class="header-btn">New</button>
-            <input type="file" id="fileInput" accept=".json" style="display: none;">
-            <div class="header-divider"></div>
-            <div class="more-menu-container">
-                <button id="moreMenuBtn" class="header-btn">More <span class="dropdown-arrow">▼</span></button>
-                <div id="moreMenu" class="more-menu" style="display: none;">
-                    <button id="importVideoBtn" class="more-option">
-                        <span class="more-icon">🎥</span> Import Video
-                    </button>
-                    <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
-                    <button id="importImagesBtn" class="more-option">
-                        <span class="more-icon">🖼️</span> Import Images
-                    </button>
-                    <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
-                    <div class="more-divider"></div>
-                    <button id="shortcutsBtn" class="more-option shortcuts-btn">
-                        <span class="more-icon">⌨️</span> Keyboard Shortcuts
-                    </button>
-                    <button id="darkModeBtn" class="more-option">
-                        <span class="more-icon" id="darkModeIconWrap">🌙</span> <span id="darkModeLabel">Dark Mode</span>
-                    </button>
-                </div>
-            </div>
         </div>
     </header>
 

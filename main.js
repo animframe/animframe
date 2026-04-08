@@ -499,77 +499,39 @@ function setupEventListeners() {
     document.getElementById('undoBtn').addEventListener('click', undo);
     document.getElementById('redoBtn').addEventListener('click', redo);
 
-    // Export/Import
-    // Export menu toggle
-    const exportMenuBtn = document.getElementById('exportMenuBtn');
-    const exportMenu = document.getElementById('exportMenu');
+    // File menu
+    var fileMenuBtn = document.getElementById('fileMenuBtn');
+    var fileMenu = document.getElementById('fileMenu');
     
-    exportMenuBtn.addEventListener('click', (e) => {
+    fileMenuBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        const isVisible = exportMenu.style.display === 'block';
-        
-        if (isVisible) {
-            exportMenu.style.display = 'none';
-            exportMenu.style.visibility = 'hidden';
-            exportMenu.style.opacity = '0';
-        } else {
-            exportMenu.style.display = 'block';
-            exportMenu.style.visibility = 'visible';
-            exportMenu.style.opacity = '1';
-        }
-        
+        fileMenu.style.display = fileMenu.style.display === 'none' ? 'block' : 'none';
     });
     
-    // Close export menu when clicking outside
-    document.addEventListener('click', (e) => {
-        if (exportMenu.style.display === 'block' && 
-            !exportMenu.contains(e.target) && 
-            !exportMenuBtn.contains(e.target)) {
-            exportMenu.style.display = 'none';
-            exportMenu.style.visibility = 'hidden';
-            exportMenu.style.opacity = '0';
+    document.addEventListener('click', function(e) {
+        if (fileMenu.style.display === 'block' && !fileMenu.contains(e.target) && !fileMenuBtn.contains(e.target)) {
+            fileMenu.style.display = 'none';
         }
     });
     
-    // Export options
-    document.getElementById('exportGifBtn').addEventListener('click', () => {
-        exportMenu.style.display = 'none';
-        exportMenu.style.visibility = 'hidden';
-        exportMenu.style.opacity = '0';
-        exportAsGIF();
-    });
+    function closeFileMenu() {
+        fileMenu.style.display = 'none';
+    }
     
-    document.getElementById('exportPngBtn').addEventListener('click', () => {
-        exportMenu.style.display = 'none';
-        exportMenu.style.visibility = 'hidden';
-        exportMenu.style.opacity = '0';
-        exportAsPNGSequence();
-    });
-    
-    document.getElementById('exportMp4Btn').addEventListener('click', () => {
-        exportMenu.style.display = 'none';
-        exportMenu.style.visibility = 'hidden';
-        exportMenu.style.opacity = '0';
-        exportAsMP4();
-    });
-    document.getElementById('exportJsonBtn').addEventListener('click', exportProject);
-    document.getElementById('importJsonBtn').addEventListener('click', () => {
-        document.getElementById('fileInput').click();
-    });
+    // File menu actions
+    document.getElementById('newProjectBtn').addEventListener('click', function() { closeFileMenu(); newProject(); });
+    document.getElementById('exportJsonBtn').addEventListener('click', function() { closeFileMenu(); exportProject(); });
+    document.getElementById('importJsonBtn').addEventListener('click', function() { closeFileMenu(); document.getElementById('fileInput').click(); });
     document.getElementById('fileInput').addEventListener('change', importProject);
-    document.getElementById('newProjectBtn').addEventListener('click', newProject);
-
-    // Video import
-    document.getElementById('importVideoBtn').addEventListener('click', () => {
-        document.getElementById('videoFileInput').click();
-    });
+    
+    document.getElementById('importVideoBtn').addEventListener('click', function() { closeFileMenu(); document.getElementById('videoFileInput').click(); });
     document.getElementById('videoFileInput').addEventListener('change', handleVideoFileSelect);
-
-    // Image import
-    document.getElementById('importImagesBtn').addEventListener('click', () => {
-        document.getElementById('imageFileInput').click();
-    });
+    document.getElementById('importImagesBtn').addEventListener('click', function() { closeFileMenu(); document.getElementById('imageFileInput').click(); });
     document.getElementById('imageFileInput').addEventListener('change', handleImageFileSelect);
+    
+    document.getElementById('exportGifBtn').addEventListener('click', function() { closeFileMenu(); exportAsGIF(); });
+    document.getElementById('exportPngBtn').addEventListener('click', function() { closeFileMenu(); exportAsPNGSequence(); });
+    document.getElementById('exportMp4Btn').addEventListener('click', function() { closeFileMenu(); exportAsMP4(); });
 
     // Auto-save every 10 seconds
     setInterval(saveToLocalStorage, 10000);
@@ -599,26 +561,6 @@ function setupEventListeners() {
         var label = document.getElementById('darkModeLabel');
         if (iconWrap) iconWrap.textContent = '☀️';
         if (label) label.textContent = 'Light Mode';
-    }
-    
-    // More menu toggle
-    var moreBtn = document.getElementById('moreMenuBtn');
-    var moreMenu = document.getElementById('moreMenu');
-    if (moreBtn && moreMenu) {
-        moreBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
-        });
-        // Close on click outside
-        document.addEventListener('click', function() {
-            moreMenu.style.display = 'none';
-        });
-        moreMenu.addEventListener('click', function(e) {
-            // Close menu after clicking an option (except file inputs)
-            if (e.target.closest('.more-option')) {
-                setTimeout(function() { moreMenu.style.display = 'none'; }, 100);
-            }
-        });
     }
     
     // Detect Mac and swap modifier labels
