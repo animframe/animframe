@@ -15,6 +15,7 @@
     <header class="app-header">
         <div class="header-left">
             <span class="app-name">AnimFrame</span>
+            <button id="aboutBtn" class="about-btn" title="About AnimFrame">About</button>
             <div class="canvas-size-selector">
                 <label class="canvas-size-label">Canvas</label>
                 <select id="canvasSizeSelect" class="canvas-size-select">
@@ -478,6 +479,28 @@
                     <button class="modal-btn secondary" id="videoImportCancelBtn">Cancel</button>
                     <button class="modal-btn primary" id="videoImportConfirmBtn">Import Frames</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutPanel" class="about-overlay" style="display: none;">
+        <div class="about-backdrop" id="aboutBackdrop"></div>
+        <div class="about-dialog">
+            <button class="about-close" id="aboutCloseBtn">&times;</button>
+            <div class="about-logo">AnimFrame</div>
+            <p class="about-version">v1.0</p>
+            <p class="about-desc">A free, browser-based vector animation tool. Draw frame-by-frame, add layers, use onion skinning, and export as GIF, MP4, or PNG. Works on desktop and iPad with Apple Pencil support.</p>
+            <p class="about-desc">No signup. No download. Your work stays in your browser.</p>
+            <div class="about-links">
+                <a href="https://github.com/animframe" target="_blank" class="about-link">GitHub</a>
+                <a href="https://twitter.com/animframe" target="_blank" class="about-link">Twitter</a>
+            </div>
+            <div class="about-support">
+                <p class="about-support-label">If you find this useful</p>
+                <a href="https://buymeacoffee.com/animframe" target="_blank" class="bmc-link">
+                    ✏️ Buy me a coffee
+                </a>
             </div>
         </div>
     </div>

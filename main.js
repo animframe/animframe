@@ -587,6 +587,11 @@ function setupEventListeners() {
     
     // Dark mode toggle
     document.getElementById('darkModeBtn').addEventListener('click', toggleDarkMode);
+
+    // About panel
+    document.getElementById('aboutBtn').addEventListener('click', openAboutPanel);
+    document.getElementById('aboutCloseBtn').addEventListener('click', closeAboutPanel);
+    document.getElementById('aboutBackdrop').addEventListener('click', closeAboutPanel);
     // Restore dark mode preference
     if (localStorage.getItem('animframe-dark-mode') === 'true') {
         document.documentElement.setAttribute('data-theme', 'dark');
@@ -5916,6 +5921,14 @@ function toggleDarkMode() {
         document.getElementById('darkModeLabel').textContent = 'Light Mode';
         localStorage.setItem('animframe-dark-mode', 'true');
     }
+}
+
+function openAboutPanel() {
+    document.getElementById('aboutPanel').style.display = 'flex';
+}
+
+function closeAboutPanel() {
+    document.getElementById('aboutPanel').style.display = 'none';
 }
 
 // ==================== START APPLICATION ====================
