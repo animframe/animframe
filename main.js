@@ -94,6 +94,7 @@ function init() {
     
     setupEventListeners();
     setupKeyboardShortcuts();
+    setupPalette();
     loadFromLocalStorage();
     syncBackgroundUI(); // Sync UI with loaded state
     updateBackground(); // Set initial background
@@ -112,6 +113,9 @@ function init() {
     updateLayerList();
     updateFrameList();
     updateFrameCounter();
+
+    // Restore the full project (incl. reference images) from IndexedDB, then refresh.
+    rehydrateProjectFromIdb();
 }
 
 // Watchdog timer to detect and fix stuck playback states (iPad Safari bug workaround)
@@ -309,6 +313,7 @@ function setupEventListeners() {
             applyColorToSelection(e.target.value);
             saveToLocalStorage();
         }
+        renderPalette();
     });
     
     // Smoothing slider
@@ -367,8 +372,6 @@ function setupEventListeners() {
     document.getElementById('addFrameBtn').addEventListener('click', addFrame);
     document.getElementById('duplicateFrameBtn').addEventListener('click', duplicateFrame);
     document.getElementById('deleteFrameBtn').addEventListener('click', deleteFrame);
-    document.getElementById('copyFrameBtn').addEventListener('click', copyFrame);
-    document.getElementById('pasteFrameBtn').addEventListener('click', pasteFrame);
 
     // Onion skin toggle
     const onionToggleBtn = document.getElementById('onionSkinToggle');
@@ -532,6 +535,7 @@ function setupEventListeners() {
     document.getElementById('exportGifBtn').addEventListener('click', function() { closeFileMenu(); exportAsGIF(); });
     document.getElementById('exportPngBtn').addEventListener('click', function() { closeFileMenu(); exportAsPNGSequence(); });
     document.getElementById('exportMp4Btn').addEventListener('click', function() { closeFileMenu(); exportAsMP4(); });
+    document.getElementById('exportHtmlBtn').addEventListener('click', function() { closeFileMenu(); exportAsHTMLEmbed(); });
 
     // Auto-save every 10 seconds
     setInterval(saveToLocalStorage, 10000);
@@ -548,20 +552,14 @@ function setupEventListeners() {
     document.querySelector('.shortcuts-backdrop').addEventListener('click', closeShortcutsPanel);
     
     // Dark mode toggle
-    document.getElementById('darkModeBtn').addEventListener('click', toggleDarkMode);
+    document.getElementById('darkModeBtn').addEventListener('click', cycleTheme);
 
     // About panel
     document.getElementById('aboutBtn').addEventListener('click', openAboutPanel);
     document.getElementById('aboutCloseBtn').addEventListener('click', closeAboutPanel);
     document.getElementById('aboutBackdrop').addEventListener('click', closeAboutPanel);
-    // Restore dark mode preference
-    if (localStorage.getItem('animframe-dark-mode') === 'true') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-        var iconWrap = document.getElementById('darkModeIconWrap');
-        var label = document.getElementById('darkModeLabel');
-        if (iconWrap) iconWrap.textContent = '☀️';
-        if (label) label.textContent = 'Light Mode';
-    }
+    // Theme: dark by default, with light and "match system" options
+    initTheme();
     
     // Detect Mac and swap modifier labels
     const isMacPlatform = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -688,7 +686,7 @@ function handleKeyboardShortcut(e) {
     }
     
     // O key - toggle onion skin
-    if (e.key === 'o' || e.key === 'O') {
+    if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         const onionToggle = document.getElementById('onionSkinToggle');
         if (onionToggle) {
@@ -700,28 +698,28 @@ function handleKeyboardShortcut(e) {
     }
     
     // B key - switch to pen/brush tool
-    if (e.key === 'b' || e.key === 'B') {
+    if ((e.key === 'b' || e.key === 'B') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         selectTool('pen');
         return;
     }
     
     // E key - switch to eraser tool
-    if (e.key === 'e' || e.key === 'E') {
+    if ((e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         selectTool('eraser');
         return;
     }
     
     // G key - switch to fill tool
-    if (e.key === 'g' || e.key === 'G') {
+    if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         selectTool('fill');
         return;
     }
     
     // V key - switch to select tool
-    if (e.key === 'v' || e.key === 'V') {
+    if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         selectTool('select');
         return;
@@ -3462,72 +3460,254 @@ function redo() {
 }
 
 // ==================== LOCAL STORAGE ====================
-function saveToLocalStorage() {
-    try {
-        // Strip reference images from save data (too large for localStorage)
-        const layersForSave = state.layers.map(layer => ({
-            ...layer,
-            frames: layer.frames.map(frame => {
-                if (frame.referenceImage) {
-                    return { paths: frame.paths };
-                }
+// ==================== PROJECT STORAGE (localStorage + IndexedDB) ====================
+// localStorage keeps a lightweight copy (reference images stripped) for instant load.
+// IndexedDB keeps the FULL project including reference images, which localStorage can't
+// fit — so rotoscope/imported images survive a reload. IndexedDB is best-effort: if it's
+// unavailable the app behaves exactly as before.
+
+var AF_LS_KEY = 'vectorAnimationToolData';
+var AF_DB_NAME = 'animframe';
+var AF_DB_STORE = 'kv';
+var AF_PROJECT_KEY = 'project';
+var afSaveWarned = false;
+var afIdbSaveTimer = null;
+
+function afIdbOpen() {
+    return new Promise(function(resolve, reject) {
+        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+        var req = indexedDB.open(AF_DB_NAME, 1);
+        req.onupgradeneeded = function() { try { req.result.createObjectStore(AF_DB_STORE); } catch (e) {} };
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function() { reject(req.error || new Error('IndexedDB open failed')); };
+    });
+}
+function afIdbSet(key, value) {
+    return afIdbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction(AF_DB_STORE, 'readwrite');
+            tx.objectStore(AF_DB_STORE).put(value, key);
+            tx.oncomplete = function() { resolve(true); };
+            tx.onerror = function() { reject(tx.error); };
+            tx.onabort = function() { reject(tx.error); };
+        });
+    });
+}
+function afIdbGet(key) {
+    return afIdbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction(AF_DB_STORE, 'readonly');
+            var rq = tx.objectStore(AF_DB_STORE).get(key);
+            rq.onsuccess = function() { resolve(rq.result); };
+            rq.onerror = function() { reject(rq.error); };
+        });
+    });
+}
+
+function buildSaveData(includeReferenceImages) {
+    var layersForSave = state.layers.map(function(layer) {
+        return Object.assign({}, layer, {
+            frames: layer.frames.map(function(frame) {
+                if (frame.referenceImage && !includeReferenceImages) return { paths: frame.paths };
                 return frame;
             })
-        }));
+        });
+    });
+    return {
+        layers: layersForSave,
+        currentLayerId: state.currentLayerId,
+        currentFrameIndex: state.currentFrameIndex,
+        maxFrames: state.maxFrames,
+        layerIdCounter: state.layerIdCounter,
+        fps: state.fps,
+        backgroundColor: state.backgroundColor,
+        canvasWidth: state.canvasWidth,
+        canvasHeight: state.canvasHeight,
+        onionSkinEnabled: state.onionSkinEnabled,
+        onionSkinSettings: state.onionSkinSettings,
+        savedAt: Date.now(),
+        version: '4.4'
+    };
+}
 
-        const saveData = {
-            layers: layersForSave,
-            currentLayerId: state.currentLayerId,
-            currentFrameIndex: state.currentFrameIndex,
-            maxFrames: state.maxFrames,
-            layerIdCounter: state.layerIdCounter,
-            fps: state.fps,
-            backgroundColor: state.backgroundColor,
-            onionSkinEnabled: state.onionSkinEnabled,
-            onionSkinSettings: state.onionSkinSettings,
-            version: '4.3'
-        };
-        localStorage.setItem('vectorAnimationToolData', JSON.stringify(saveData));
+function notifySaveTrouble() {
+    try {
+        showAlert('AnimFrame couldn\u2019t autosave to this browser \u2014 your project may be too large for browser storage. To be safe, use File \u203a Save Project to download a backup .animframe file.', 'Autosave problem');
+    } catch (e) { /* no modal available */ }
+}
+
+function flushIdbSave() {
+    if (!window.indexedDB) return;
+    if (afIdbSaveTimer) { clearTimeout(afIdbSaveTimer); afIdbSaveTimer = null; }
+    try { afIdbSet(AF_PROJECT_KEY, buildSaveData(true)).catch(function(e) { console.warn('IndexedDB save failed:', e); }); } catch (e) {}
+}
+
+function saveToLocalStorage() {
+    // Fast, synchronous, lightweight (reference images stripped) for instant reload.
+    try {
+        localStorage.setItem(AF_LS_KEY, JSON.stringify(buildSaveData(false)));
     } catch (e) {
-        console.error('Failed to save to localStorage:', e);
+        console.error('localStorage save failed:', e);
+        if (!afSaveWarned) { afSaveWarned = true; notifySaveTrouble(); }
     }
+    // Full project (with reference images) to IndexedDB, debounced to avoid churn.
+    if (window.indexedDB) {
+        if (afIdbSaveTimer) clearTimeout(afIdbSaveTimer);
+        afIdbSaveTimer = setTimeout(function() {
+            afIdbSaveTimer = null;
+            try { afIdbSet(AF_PROJECT_KEY, buildSaveData(true)).catch(function(e) { console.warn('IndexedDB save failed:', e); }); } catch (e) {}
+        }, 1500);
+    }
+}
+
+function isValidProjectData(data) {
+    return !!(data && typeof data.version === 'string' && /^4\./.test(data.version) && data.layers && data.layers[0] && data.layers[0].frames);
+}
+
+function applyLoadedData(data) {
+    state.layers = data.layers;
+    state.layers.forEach(function(l) { if (l.opacity === undefined) l.opacity = 1; });
+    state.currentLayerId = data.currentLayerId || state.layers[0].id;
+    state.currentFrameIndex = data.currentFrameIndex || 0;
+    state.maxFrames = data.maxFrames || 1;
+    state.layerIdCounter = data.layerIdCounter || 1;
+    state.fps = data.fps || 12;
+    state.backgroundColor = data.backgroundColor || '#ffffff';
+    if (data.canvasWidth) state.canvasWidth = data.canvasWidth;
+    if (data.canvasHeight) state.canvasHeight = data.canvasHeight;
+    state.onionSkinEnabled = data.onionSkinEnabled !== undefined ? data.onionSkinEnabled : true;
+    if (data.onionSkinSettings) state.onionSkinSettings = data.onionSkinSettings;
 }
 
 function loadFromLocalStorage() {
     try {
-        const savedData = localStorage.getItem('vectorAnimationToolData');
+        var savedData = localStorage.getItem(AF_LS_KEY);
         if (savedData) {
-            const data = JSON.parse(savedData);
-            
-            // Check if data has layer-centric structure
-            if ((data.version === '4.0' || data.version === '4.1' || data.version === '4.2' || data.version === '4.3') && data.layers && data.layers[0] && data.layers[0].frames) {
-                state.layers = data.layers;
-                // Ensure opacity exists on all layers (data migration)
-                state.layers.forEach(l => { if (l.opacity === undefined) l.opacity = 1; });
-                state.currentLayerId = data.currentLayerId || state.layers[0].id;
-                state.currentFrameIndex = data.currentFrameIndex || 0;
-                state.maxFrames = data.maxFrames || 1;
-                state.layerIdCounter = data.layerIdCounter || 1;
-                state.fps = data.fps || 12;
-                state.backgroundColor = data.backgroundColor || '#ffffff';
-                
-                // Load onion skin settings (default to enabled if not present)
-                state.onionSkinEnabled = data.onionSkinEnabled !== undefined ? data.onionSkinEnabled : true;
-                if (data.onionSkinSettings) {
-                    state.onionSkinSettings = data.onionSkinSettings;
-                }
-            } else {
-                // Old format - reset
-                resetToDefault();
-            }
-            
-            document.getElementById('fpsSelect').value = state.fps;
-            // Background UI will be synced in init() via syncBackgroundUI()
+            var data = JSON.parse(savedData);
+            if (isValidProjectData(data)) applyLoadedData(data);
+            else resetToDefault();
+            var fpsSel = document.getElementById('fpsSelect');
+            if (fpsSel) fpsSel.value = state.fps;
         }
     } catch (e) {
         console.error('Failed to load from localStorage:', e);
         resetToDefault();
     }
+}
+
+// After the instant localStorage load, pull the full project (with reference images)
+// back from IndexedDB and refresh the UI. Non-fatal if IndexedDB is unavailable, and
+// it won't adopt an IndexedDB copy that's older than what localStorage just loaded.
+function rehydrateProjectFromIdb() {
+    if (!window.indexedDB) return Promise.resolve(false);
+    var lsAt = 0;
+    try { var ls = JSON.parse(localStorage.getItem(AF_LS_KEY) || 'null'); if (ls && ls.savedAt) lsAt = ls.savedAt; } catch (e) {}
+    return afIdbGet(AF_PROJECT_KEY).then(function(data) {
+        if (!isValidProjectData(data)) return false;
+        if ((data.savedAt || 0) < lsAt) return false; // localStorage is newer; keep it
+        applyLoadedData(data);
+        var fpsSel = document.getElementById('fpsSelect');
+        if (fpsSel) fpsSel.value = state.fps;
+        syncBackgroundUI();
+        updateBackground();
+        updateCanvasSizeSelector(state.canvasWidth, state.canvasHeight);
+        renderFrame();
+        updateLayerList();
+        updateFrameList();
+        updateFrameCounter();
+        return true;
+    }).catch(function(e) { console.warn('IndexedDB load failed:', e); return false; });
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', flushIdbSave);
+    document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'hidden') flushIdbSave(); });
+}
+
+// ==================== COLOUR PALETTE / SWATCHES ====================
+// A personal swatch set, persisted in localStorage so it follows the user across projects.
+
+var AF_PALETTE_KEY = 'animframe-palette';
+var AF_PALETTE_MAX = 24;
+var AF_PALETTE_DEFAULT = ['#000000', '#ffffff', '#9e9e9e', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#5e35b1', '#d81b60', '#6d4c41', '#00acc1'];
+var afPalette = [];
+
+function afIsHexColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c); }
+function afNormHex(c) { return afIsHexColor(c) ? c.toLowerCase() : null; }
+
+function loadPalette() {
+    try {
+        var raw = localStorage.getItem(AF_PALETTE_KEY);
+        if (raw) {
+            var arr = JSON.parse(raw);
+            if (Array.isArray(arr)) { afPalette = arr.filter(afIsHexColor).map(function(c) { return c.toLowerCase(); }).slice(0, AF_PALETTE_MAX); return; }
+        }
+    } catch (e) { /* fall through to defaults */ }
+    afPalette = AF_PALETTE_DEFAULT.slice();
+}
+
+function savePalette() {
+    try { localStorage.setItem(AF_PALETTE_KEY, JSON.stringify(afPalette)); } catch (e) { /* non-fatal */ }
+}
+
+function renderPalette() {
+    var el = document.getElementById('palette');
+    if (!el) return;
+    var active = (state.strokeColor || '').toLowerCase();
+    var html = '';
+    afPalette.forEach(function(c) {
+        var sel = c === active ? ' selected' : '';
+        html += '<button type="button" class="swatch' + sel + '" data-color="' + c + '" title="' + c + '" style="background:' + c + '">' +
+            '<span class="swatch-remove" title="Remove">\u00d7</span></button>';
+    });
+    if (afPalette.length < AF_PALETTE_MAX) {
+        html += '<button type="button" class="swatch swatch-add" title="Save current colour to palette">+</button>';
+    }
+    el.innerHTML = html;
+}
+
+function addCurrentColorToPalette() {
+    var c = afNormHex(state.strokeColor);
+    if (!c) return;
+    if (afPalette.indexOf(c) !== -1) { renderPalette(); return; } // already saved
+    afPalette.push(c);
+    if (afPalette.length > AF_PALETTE_MAX) afPalette = afPalette.slice(-AF_PALETTE_MAX);
+    savePalette();
+    renderPalette();
+}
+
+function selectSwatch(c) {
+    c = afNormHex(c);
+    if (!c) return;
+    state.strokeColor = c;
+    var picker = document.getElementById('colorPicker');
+    if (picker) picker.value = c;
+    if (state.tool === 'select' && state.selection && state.selection.indices && state.selection.indices.length > 0) {
+        applyColorToSelection(c);
+    }
+    renderPalette();
+}
+
+function deleteSwatch(c) {
+    c = (c || '').toLowerCase();
+    afPalette = afPalette.filter(function(x) { return x !== c; });
+    savePalette();
+    renderPalette();
+}
+
+function setupPalette() {
+    loadPalette();
+    var el = document.getElementById('palette');
+    if (!el) return;
+    el.addEventListener('click', function(e) {
+        var rm = e.target.closest ? e.target.closest('.swatch-remove') : null;
+        if (rm) { var sw = rm.closest('.swatch'); if (sw) deleteSwatch(sw.getAttribute('data-color')); e.stopPropagation(); return; }
+        var add = e.target.closest ? e.target.closest('.swatch-add') : null;
+        if (add) { addCurrentColorToPalette(); return; }
+        var swatch = e.target.closest ? e.target.closest('.swatch') : null;
+        if (swatch && swatch.getAttribute('data-color')) selectSwatch(swatch.getAttribute('data-color'));
+    });
+    renderPalette();
 }
 
 function resetToDefault() {
@@ -3986,15 +4166,15 @@ async function exportAsMP4() {
 async function renderFrameToCanvas(ctx, frameIndex) {
     // Iterate through layers in order
     for (const layer of state.layers) {
-        if (!layer.visible || !layer.frames[frameIndex]) {
-            continue;
-        }
-        
+        if (!layer.visible) continue;
+
+        // Resolve holds + background pinning so held frames don't export blank
+        const frame = afResolveFrame(layer, frameIndex);
+        if (!frame) continue;
+
         // Apply layer opacity for export
         const layerOpacity = layer.opacity !== undefined ? layer.opacity : 1;
         ctx.globalAlpha = layerOpacity;
-
-        const frame = layer.frames[frameIndex];
 
         // Draw reference image if present
         if (frame.referenceImage) {
@@ -4015,7 +4195,7 @@ async function renderFrameToCanvas(ctx, frameIndex) {
         }
         
         // Render each path in the frame
-        for (const pathData of frame.paths) {
+        for (const pathData of (frame.paths || [])) {
             // Handle eraser tool
             if (pathData.tool === 'eraser') {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -4174,6 +4354,413 @@ function showDownloadModal(files) {
     });
 }
 
+
+// ==================== SELF-CONTAINED WEB EXPORT (deduped + delta) ====================
+
+var AF_PRECISION = 1; // decimal places kept on path coordinates
+
+function afEscAttr(v) {
+    return String(v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// Round decimal numbers in a path 'd' string to AF_PRECISION places, trimming trailing zeros.
+function afRoundPath(d) {
+    return String(d).replace(/-?\d*\.\d+/g, function(m) {
+        var r = parseFloat(m).toFixed(AF_PRECISION).replace(/\.?0+$/, '');
+        return r === '-0' ? '0' : r;
+    });
+}
+
+// Serialise one path, mirroring createPathElement (dual fill/stroke mode + eraser blend).
+function afSerializePath(p) {
+    if (!p || !p.d) return '';
+    var eraser = (p.tool === 'eraser') ? ' style="mix-blend-mode:destination-out"' : '';
+    var d = afEscAttr(afRoundPath(p.d));
+    if (p.fill && p.fill !== 'none') {
+        var stroke = p.stroke ? afEscAttr(p.stroke) : 'none';
+        return '<path d="' + d + '" fill="' + afEscAttr(p.fill) + '" stroke="' + stroke + '"' + eraser + '/>';
+    }
+    return '<path d="' + d + '" fill="none" stroke="' + afEscAttr(p.stroke || '#000000') +
+        '" stroke-width="' + (p.strokeWidth != null ? p.strokeWidth : 1) +
+        '" stroke-linecap="round" stroke-linejoin="round"' + eraser + '/>';
+}
+
+// Which frame a layer shows at a timeline slot (resolves holds + background pinning).
+function afResolveFrame(layer, slot) {
+    if (layer.isBackground) return layer.frames[0] || null;
+    var frame = layer.frames[slot];
+    if (frame && frame.holdReference !== undefined) frame = layer.frames[frame.holdReference];
+    return frame || null;
+}
+
+// Inner markup for a layer's resolved frame at a slot ('' when empty).
+function afLayerInner(layer, slot, W, H) {
+    var frame = afResolveFrame(layer, slot);
+    if (!frame) return '';
+    var inner = '';
+    if (frame.referenceImage) {
+        inner += '<image href="' + afEscAttr(frame.referenceImage) + '" x="0" y="0" width="' + W +
+            '" height="' + H + '" preserveAspectRatio="xMidYMid meet"/>';
+    }
+    if (frame.paths) frame.paths.forEach(function(p) { inner += afSerializePath(p); });
+    return inner;
+}
+
+// Delta model: each unique (layer, drawing) becomes one "cell"; each slot points at cells.
+// A static or held layer collapses to a single cell shared across every slot.
+function afBuildModel() {
+    var W = state.canvasWidth || 800, H = state.canvasHeight || 600;
+    var nFrames = state.maxFrames || 1;
+    var layers = [];
+    state.layers.forEach(function(layer, li) {
+        if (!layer.visible) return;
+        var opacity = (layer.opacity !== undefined && layer.opacity < 1) ? layer.opacity : null;
+        var byContent = {}, cells = [], schedule = new Array(nFrames).fill(-1);
+        for (var s = 0; s < nFrames; s++) {
+            var content = afLayerInner(layer, s, W, H);
+            if (content === '') continue;
+            var ci = byContent[content];
+            if (ci === undefined) { ci = cells.length; byContent[content] = ci; cells.push({ content: content, slots: [] }); }
+            cells[ci].slots.push(s);
+            schedule[s] = ci;
+        }
+        if (cells.length) layers.push({ index: li, opacity: opacity, cells: cells, schedule: schedule });
+    });
+    return {
+        W: W, H: H, nFrames: nFrames, fps: state.fps || 12, layers: layers,
+        bg: (!state.backgroundColor || state.backgroundColor === 'transparent') ? 'none' : state.backgroundColor
+    };
+}
+
+// Compress a sorted slot list into "a-b,c" ranges.
+function afRanges(slots) {
+    var out = [], i = 0;
+    while (i < slots.length) {
+        var a = slots[i], b = a;
+        while (i + 1 < slots.length && slots[i + 1] === b + 1) { b = slots[++i]; }
+        out.push(a === b ? '' + a : a + '-' + b);
+        i++;
+    }
+    return out.join(',');
+}
+
+// Reconstruct a slot's full composite from the model (verification + animated-SVG export).
+function afCompositeFromModel(model, slot) {
+    var s = '';
+    model.layers.forEach(function(L) {
+        var ci = L.schedule[slot];
+        if (ci < 0) return;
+        var op = L.opacity != null ? ' opacity="' + L.opacity + '"' : '';
+        s += '<g' + op + '>' + L.cells[ci].content + '</g>';
+    });
+    return s;
+}
+
+// ---- HTML embed (interactive, ~1KB inline player, no runtime needed) ----
+
+// Self-contained player. Injected via Function.toString(). Honours reduced-motion,
+// pauses when scrolled offscreen, click toggles play/pause.
+function afCellPlayer(rootId, fps, nFrames, trigger) {
+    var root = document.getElementById(rootId);
+    if (!root) return;
+    trigger = (root.getAttribute('data-trigger') || trigger || 'loop').toLowerCase();
+    var cells = root.getElementsByClassName('af-cell');
+    var bySlot = [], i, c;
+    for (i = 0; i < nFrames; i++) bySlot[i] = [];
+    for (c = 0; c < cells.length; c++) {
+        var toks = (cells[c].getAttribute('data-on') || '').split(',');
+        for (var t = 0; t < toks.length; t++) {
+            var tok = toks[t]; if (!tok) continue;
+            var dash = tok.indexOf('-');
+            if (dash < 0) { var v = +tok; if (bySlot[v]) bySlot[v].push(cells[c]); }
+            else { var a = +tok.slice(0, dash), b = +tok.slice(dash + 1); for (var s = a; s <= b; s++) if (bySlot[s]) bySlot[s].push(cells[c]); }
+        }
+    }
+    for (var h = 0; h < cells.length; h++) cells[h].style.display = 'none';
+    var cur = [];
+    function show(idx) { var k; for (k = 0; k < cur.length; k++) cur[k].style.display = 'none'; cur = bySlot[idx] || []; for (k = 0; k < cur.length; k++) cur[k].style.display = ''; }
+    show(0);
+
+    var pi = 0;
+    // Tiny control surface (used internally; also handy for custom scripting and future clips).
+    root.afGoTo = function(n) { pi = Math.max(0, Math.min(nFrames - 1, n | 0)); show(pi); };
+    if (nFrames <= 1) { root.afPlay = root.afPause = root.afReset = function() {}; return; }
+
+    var reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var mode = trigger;
+    if (reduce && (mode === 'loop' || mode === 'once' || mode === 'loopclick')) mode = 'click'; // don't autoplay under reduced-motion
+
+    var acc = 0, last = 0, interval = 1000 / fps, running = false, done = false;
+    function tick(ts) {
+        if (last && running) {
+            acc += ts - last;
+            while (acc >= interval) {
+                acc -= interval; pi++;
+                if (pi >= nFrames) {
+                    if (mode === 'once') { pi = nFrames - 1; running = false; done = true; show(pi); break; }
+                    pi = 0;
+                }
+                show(pi);
+            }
+        }
+        last = ts;
+        requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    function play() { last = 0; if (mode === 'once' && done) { pi = 0; done = false; show(0); } running = true; }
+    function pause() { running = false; }
+    function reset() { running = false; pi = 0; acc = 0; show(0); }
+    root.afPlay = play; root.afPause = pause; root.afReset = reset;
+
+    if (mode === 'hover') {
+        root.tabIndex = 0; root.style.cursor = 'pointer';
+        root.addEventListener('mouseenter', play);
+        root.addEventListener('mouseleave', reset);
+        root.addEventListener('focus', play);
+        root.addEventListener('blur', reset);
+    } else if (mode === 'click') {
+        root.tabIndex = 0; root.style.cursor = 'pointer';
+        var toggle = function() { running ? pause() : play(); };
+        root.addEventListener('click', toggle);
+        root.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    } else if (mode === 'loopclick') {
+        // Original behaviour: autoplay loop, click (or Enter) toggles pause/resume.
+        root.tabIndex = 0; root.style.cursor = 'pointer';
+        var userPaused = false, onscreen = true;
+        var sync = function() { if (onscreen && !userPaused) play(); else pause(); };
+        var togglePause = function() { userPaused = !userPaused; sync(); };
+        root.addEventListener('click', togglePause);
+        root.addEventListener('keydown', function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePause(); } });
+        if (window.IntersectionObserver) { new IntersectionObserver(function(es) { onscreen = es[0].isIntersecting; sync(); }).observe(root); }
+        else { sync(); }
+    } else { // loop or once: autoplay, gated by on-screen visibility
+        if (window.IntersectionObserver) {
+            new IntersectionObserver(function(es) {
+                if (es[0].isIntersecting) { if (mode !== 'once' || !done) play(); }
+                else pause();
+            }).observe(root);
+        } else { play(); }
+    }
+}
+
+// The inner SVG (background + layers + cells). Reused for the embed and the live preview.
+function afBuildEmbedSVG(model) {
+    var s = '<svg viewBox="0 0 ' + model.W + ' ' + model.H + '" xmlns="http://www.w3.org/2000/svg"' +
+        ' preserveAspectRatio="xMidYMid meet" style="position:absolute;top:0;left:0;width:100%;height:100%;">';
+    if (model.bg !== 'none') s += '<rect width="100%" height="100%" fill="' + afEscAttr(model.bg) + '"/>';
+    model.layers.forEach(function(L) {
+        var op = L.opacity != null ? ' opacity="' + L.opacity + '"' : '';
+        s += '<g class="af-layer"' + op + '>';
+        L.cells.forEach(function(cell) {
+            var on = afRanges(cell.slots);
+            var vis = cell.slots.indexOf(0) >= 0 ? '' : 'display:none';
+            s += '<g class="af-cell" data-on="' + on + '" style="' + vis + '">' + cell.content + '</g>';
+        });
+        s += '</g>';
+    });
+    s += '</svg>';
+    return s;
+}
+
+function afBuildEmbedHTML(model, opts) {
+    opts = opts || {};
+    var trigger = opts.trigger || 'loop';
+    var name = opts.name || 'Animation';
+    var uid = 'animframe-' + Math.random().toString(36).slice(2, 10);
+    var pad = (model.H / model.W * 100).toFixed(4);
+    return '<!-- AnimFrame animation — animframe.com. Self-contained: the whole animation is in this block; nothing is hosted. -->\n' +
+        '<div class="animframe-embed" id="' + uid + '" role="img" aria-label="' + afEscAttr(name) + '" data-trigger="' + afEscAttr(trigger) + '"' +
+        ' style="width:100%;max-width:' + model.W + 'px;margin:0 auto;line-height:0;">\n' +
+        '  <div style="position:relative;width:100%;height:0;padding-bottom:' + pad + '%;overflow:hidden;">\n' +
+        '    ' + afBuildEmbedSVG(model) + '\n' +
+        '  </div>\n' +
+        '  <' + 'script>(' + afCellPlayer.toString() + ')(' + JSON.stringify(uid) + ',' + model.fps + ',' + model.nFrames + ',' + JSON.stringify(trigger) + ');<\/script>\n' +
+        '</div>\n';
+}
+
+// ---- Animated .svg file (CSS-driven, no JS) — works as an <img>, in Notion, READMEs, etc. ----
+
+function afBuildAnimatedSVG(model, opts) {
+    opts = opts || {};
+    var once = opts.trigger === 'once';
+    var name = opts.name || 'Animation';
+    var byContent = {}, frames = [];
+    for (var s = 0; s < model.nFrames; s++) {
+        var comp = afCompositeFromModel(model, s);
+        var fi = byContent[comp];
+        if (fi === undefined) { fi = frames.length; byContent[comp] = fi; frames.push({ content: comp, slots: [] }); }
+        frames[fi].slots.push(s);
+    }
+    var lastFi = byContent[afCompositeFromModel(model, model.nFrames - 1)]; // frame visible on the final slot
+    var dur = (model.nFrames / model.fps).toFixed(3);
+    var iter = once ? '1 both' : 'infinite';
+    var eps = 0.0001;
+    var css = '', groups = '';
+    frames.forEach(function(f, fi) {
+        var ranges = [], i = 0, slots = f.slots;
+        while (i < slots.length) { var a = slots[i], b = a; while (i + 1 < slots.length && slots[i + 1] === b + 1) { b = slots[++i]; } ranges.push([a, b + 1]); i++; }
+        var holdEnd = once && fi === lastFi;
+        var stops = ['0%{opacity:0}'];
+        ranges.forEach(function(r, ri) {
+            var sp = r[0] / model.nFrames * 100, ep = r[1] / model.nFrames * 100;
+            stops.push(sp + '%{opacity:0}', (sp + eps) + '%{opacity:1}');
+            if (holdEnd && ri === ranges.length - 1) stops.push((ep - eps) + '%{opacity:1}', '100%{opacity:1}');
+            else stops.push((ep - eps) + '%{opacity:1}', ep + '%{opacity:0}');
+        });
+        if (!holdEnd) stops.push('100%{opacity:0}');
+        css += '@keyframes af_k' + fi + '{' + stops.join('') + '}';
+        groups += '<g style="opacity:' + (fi === 0 ? 1 : 0) + ';animation:af_k' + fi + ' ' + dur + 's ' + iter + '">' + f.content + '</g>';
+    });
+    var bg = model.bg !== 'none' ? '<rect width="100%" height="100%" fill="' + afEscAttr(model.bg) + '"/>' : '';
+    var reduced = '@media(prefers-reduced-motion:reduce){g{animation:none!important}}';
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + model.W + ' ' + model.H + '" width="' + model.W + '" height="' + model.H + '" role="img">' +
+        '<title>' + afEscAttr(name) + '</title>' +
+        '<style>' + css + reduced + '</style>' + bg + groups + '</svg>\n';
+}
+
+// ---- Shared helpers ----
+
+function afFullPageWrap(snippet) {
+    return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
+        '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
+        '<title>AnimFrame animation</title>\n</head>\n' +
+        '<body style="margin:0;padding:24px;background:#f4f4f5;box-sizing:border-box;">\n' +
+        snippet + '\n</body>\n</html>\n';
+}
+
+function afExportName(name) {
+    var base = name || state.projectName || 'animframe';
+    return String(base).replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'animframe';
+}
+
+function afByteLen(str) { try { return new Blob([str]).size; } catch (e) { return str.length; } }
+function afKB(bytes) { return (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KB'; }
+
+function afDownload(filename, text, mime) {
+    var blob = new Blob([text], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+function exportAsHTMLEmbed() {
+    try {
+        if (!state.maxFrames || state.maxFrames < 1) { showAlert('There are no frames to export yet. Draw something first.', 'Nothing to export'); return; }
+        var model = afBuildModel();
+        if (!model.layers.length) { showAlert('Nothing visible to export — check that your layers have drawings and are visible.', 'Nothing to export'); return; }
+        showExportModal(model);
+    } catch (err) {
+        console.error('Web export error:', err);
+        showAlert('Failed to build the export: ' + err.message, 'Export Error');
+    }
+}
+
+function showExportModal(model) {
+    var opts = { trigger: 'loop', name: (state.projectName || 'Animation') };
+
+    // Size story (constant): deduped content vs the same frames written in full.
+    var dedupBytes = 0;
+    model.layers.forEach(function(L) { L.cells.forEach(function(c) { dedupBytes += afByteLen(c.content); }); });
+    var naiveBytes = 0;
+    for (var s = 0; s < model.nFrames; s++) naiveBytes += afByteLen(afCompositeFromModel(model, s));
+    var saved = naiveBytes > 0 ? Math.round((1 - dedupBytes / naiveBytes) * 100) : 0;
+
+    var hints = {
+        loop: 'Loops continuously; pauses when scrolled offscreen.',
+        loopclick: 'Loops continuously; click or press Enter to pause and resume. Pauses when scrolled offscreen.',
+        once: 'Plays through once when it scrolls into view, then holds the last frame.',
+        hover: 'Plays while hovered or keyboard-focused; resets to the first frame on leave.',
+        click: 'Click (or press Enter when focused) to play and pause.'
+    };
+
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;';
+    var modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-surface);color:var(--text-primary);' +
+        'border:1px solid var(--border);padding:26px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.35);z-index:2001;' +
+        'width:min(680px,94vw);max-height:88vh;overflow-y:auto;font-family:inherit;box-sizing:border-box;';
+
+    var btnBase = 'padding:10px 16px;border-radius:9px;font-size:14px;cursor:pointer;font-family:inherit;border:1px solid var(--border);';
+    var btnPrimary = btnBase + 'background:var(--text-primary);color:var(--bg-surface);border-color:var(--text-primary);';
+    var btnSecondary = btnBase + 'background:var(--bg-panel);color:var(--text-primary);';
+    var field = 'display:block;width:100%;margin-top:5px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);color:var(--text-primary);font-family:inherit;font-size:14px;font-weight:400;box-sizing:border-box;';
+
+    var previewId = 'afprev-' + Math.random().toString(36).slice(2, 8);
+    var pad = (model.H / model.W * 100).toFixed(4);
+
+    modal.innerHTML =
+        '<h3 style="margin:0 0 14px;font-size:22px;">Your animation is ready to embed</h3>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 6px;">' +
+        '<label style="flex:1;min-width:170px;font-size:13px;font-weight:600;">Name<input id="afName" type="text" style="' + field + '"></label>' +
+        '<label style="flex:1;min-width:170px;font-size:13px;font-weight:600;">Playback<select id="afTrigger" style="' + field + '">' +
+        '<option value="loop">Loop</option><option value="loopclick">Loop (click to pause)</option><option value="once">Play once</option><option value="hover">Play on hover</option><option value="click">Play on click</option>' +
+        '</select></label></div>' +
+        '<div id="afHint" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;min-height:16px;"></div>' +
+        '<div id="' + previewId + '" role="img" style="width:100%;max-width:260px;margin:0 auto 14px;line-height:0;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;">' +
+        '<div style="position:relative;width:100%;height:0;padding-bottom:' + pad + '%;overflow:hidden;">' + afBuildEmbedSVG(model) + '</div></div>' +
+        '<p style="margin:0 0 12px;color:var(--text-secondary);font-size:13px;line-height:1.55;">' +
+        'The whole animation lives inside the code — nothing is hosted, no account, no runtime. Paste it anywhere that accepts HTML (Webflow, Squarespace, Framer, Wix, your own pages); it scales to its container and is keyboard- and screen-reader-friendly.</p>' +
+        '<div id="afSize" style="font-size:13px;margin:0 0 14px;padding:10px 12px;background:var(--bg-panel);border-radius:9px;"></div>' +
+        '<label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Embed code</label>' +
+        '<textarea id="afEmbedCode" readonly style="width:100%;height:108px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-panel);' +
+        'color:var(--text-primary);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;resize:vertical;box-sizing:border-box;"></textarea>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;">' +
+        '<button id="afCopyBtn" style="' + btnPrimary + '">Copy embed code</button>' +
+        '<button id="afDlHtmlBtn" style="' + btnSecondary + '">Download .html</button>' +
+        '<button id="afDlSvgBtn" style="' + btnSecondary + '">Download animated .svg</button>' +
+        '<button id="afCloseExportBtn" style="' + btnSecondary + 'margin-left:auto;">Close</button>' +
+        '</div>';
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(modal);
+
+    var ta = modal.querySelector('#afEmbedCode');
+    var sizeEl = modal.querySelector('#afSize');
+    var hintEl = modal.querySelector('#afHint');
+    var nameInput = modal.querySelector('#afName');
+    var triggerSel = modal.querySelector('#afTrigger');
+    nameInput.value = opts.name;
+    triggerSel.value = opts.trigger;
+
+    var out = { html: '', svg: '' };
+    function render() {
+        out.html = afBuildEmbedHTML(model, opts);
+        out.svg = afBuildAnimatedSVG(model, opts);
+        ta.value = out.html;
+        sizeEl.innerHTML = '<strong>Embed:</strong> ' + afKB(afByteLen(out.html)) + ' &nbsp;&middot;&nbsp; <strong>Animated SVG:</strong> ' + afKB(afByteLen(out.svg)) +
+            (saved > 0 ? ' &nbsp;&middot;&nbsp; <span style="color:var(--text-secondary)">delta-encoded ' + saved + '% smaller than full frames</span>' : '');
+        var extra = (opts.trigger === 'hover' || opts.trigger === 'click') ? ' The .svg file loops instead (image files can\u2019t take pointer input).' : '';
+        hintEl.textContent = hints[opts.trigger] + extra;
+    }
+    render();
+
+    // Preview always loops so you can see the animation; the Playback choice affects the exported files.
+    try { afCellPlayer(previewId, model.fps, model.nFrames, 'loop'); } catch (e) { /* best-effort */ }
+
+    nameInput.addEventListener('input', function() { opts.name = nameInput.value || 'Animation'; render(); });
+    triggerSel.addEventListener('change', function() { opts.trigger = triggerSel.value; render(); });
+
+    function closeExport() { if (modal.parentNode) document.body.removeChild(modal); if (overlay.parentNode) document.body.removeChild(overlay); }
+
+    modal.querySelector('#afCopyBtn').addEventListener('click', function() {
+        var btn = this; ta.focus(); ta.select();
+        var done = function() { btn.textContent = 'Copied!'; setTimeout(function() { btn.textContent = 'Copy embed code'; }, 1600); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(out.html).then(done).catch(function() { try { document.execCommand('copy'); done(); } catch (e) {} });
+        else { try { document.execCommand('copy'); done(); } catch (e) {} }
+    });
+    modal.querySelector('#afDlHtmlBtn').addEventListener('click', function() { afDownload(afExportName(opts.name) + '-embed.html', afFullPageWrap(out.html), 'text/html'); });
+    modal.querySelector('#afDlSvgBtn').addEventListener('click', function() { afDownload(afExportName(opts.name) + '.svg', out.svg, 'image/svg+xml'); });
+    modal.querySelector('#afCloseExportBtn').addEventListener('click', closeExport);
+    overlay.addEventListener('click', closeExport);
+}
 
 // ==================== FRAME SCRUB BAR ====================
 function setupFrameScrubBar() {
@@ -5850,18 +6437,60 @@ function closeShortcutsPanel() {
     document.getElementById('shortcutsPanel').style.display = 'none';
 }
 
-function toggleDarkMode() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    if (isDark) {
-        document.documentElement.removeAttribute('data-theme');
-        document.getElementById('darkModeIconWrap').textContent = '🌙';
-        document.getElementById('darkModeLabel').textContent = 'Dark Mode';
-        localStorage.setItem('animframe-dark-mode', 'false');
-    } else {
+// Theme modes: 'dark' (default), 'light', 'system' (follow OS).
+var THEME_KEY = 'animframe-theme';
+
+function getStoredThemeMode() {
+    var mode = localStorage.getItem(THEME_KEY);
+    if (mode === 'dark' || mode === 'light' || mode === 'system') return mode;
+    // Migrate the old two-state key, if present.
+    var legacy = localStorage.getItem('animframe-dark-mode');
+    if (legacy === 'true') return 'dark';
+    if (legacy === 'false') return 'light';
+    return 'dark'; // default
+}
+
+function themeIsDark(mode) {
+    if (mode === 'dark') return true;
+    if (mode === 'light') return false;
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); // system
+}
+
+function applyTheme(mode) {
+    if (themeIsDark(mode)) {
         document.documentElement.setAttribute('data-theme', 'dark');
-        document.getElementById('darkModeIconWrap').textContent = '☀️';
-        document.getElementById('darkModeLabel').textContent = 'Light Mode';
-        localStorage.setItem('animframe-dark-mode', 'true');
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+    }
+
+    var icon = mode === 'light' ? '☀️' : (mode === 'system' ? '🖥️' : '🌙');
+    var label = mode === 'light' ? 'Light' : (mode === 'system' ? 'Match System' : 'Dark');
+    var iconWrap = document.getElementById('darkModeIconWrap');
+    var labelEl = document.getElementById('darkModeLabel');
+    var btn = document.getElementById('darkModeBtn');
+    if (iconWrap) iconWrap.textContent = icon;
+    if (labelEl) labelEl.textContent = label;
+    if (btn) btn.title = 'Theme: ' + label + ' \u2014 click to change';
+
+    localStorage.setItem(THEME_KEY, mode);
+}
+
+function cycleTheme() {
+    var order = ['dark', 'light', 'system'];
+    var next = order[(order.indexOf(getStoredThemeMode()) + 1) % order.length];
+    applyTheme(next);
+}
+
+function initTheme() {
+    applyTheme(getStoredThemeMode());
+    // Keep "Match System" in sync if the OS theme changes while the app is open.
+    if (window.matchMedia) {
+        var mql = window.matchMedia('(prefers-color-scheme: dark)');
+        var onChange = function() {
+            if (getStoredThemeMode() === 'system') applyTheme('system');
+        };
+        if (mql.addEventListener) mql.addEventListener('change', onChange);
+        else if (mql.addListener) mql.addListener(onChange); // older Safari
     }
 }
 

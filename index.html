@@ -4,7 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AnimFrame</title>
+    <script>
+      // Apply saved theme before first paint (default: dark). Mirrors initTheme() in main.js.
+      (function(){
+        try {
+          var m = localStorage.getItem('animframe-theme');
+          if (m !== 'dark' && m !== 'light' && m !== 'system') {
+            var legacy = localStorage.getItem('animframe-dark-mode');
+            m = legacy === 'false' ? 'light' : 'dark';
+          }
+          var dark = m === 'dark' || (m === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.setAttribute('data-theme','dark');
+        } catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="onboarding.css"><!-- optional onboarding module; safe to remove with onboarding.js -->
     <!-- gifshot library for reliable client-side GIF encoding without workers -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -14,7 +29,10 @@
     <!-- Minimal Top Header -->
     <header class="app-header">
         <div class="header-left">
-            <span class="app-name">AnimFrame</span>
+            <span class="brand">
+                <span class="app-mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v16M5 4l9 6-9 6"/></svg></span>
+                <span class="app-name">AnimFrame</span>
+            </span>
             <button id="aboutBtn" class="about-btn" title="About AnimFrame">About</button>
             <div class="file-menu-container">
                 <button id="fileMenuBtn" class="header-btn">File <span class="dropdown-arrow">▼</span></button>
@@ -32,9 +50,10 @@
                     <button id="exportGifBtn" class="file-option">Export GIF</button>
                     <button id="exportPngBtn" class="file-option">Export PNG Sequence</button>
                     <button id="exportMp4Btn" class="file-option">Export MP4 Video</button>
+                    <button id="exportHtmlBtn" class="file-option">Export Web Embed</button>
                     <div class="file-divider"></div>
                     <button id="shortcutsBtn" class="file-option shortcuts-btn">Keyboard Shortcuts</button>
-                    <button id="darkModeBtn" class="file-option"><span id="darkModeIconWrap">🌙</span> <span id="darkModeLabel">Dark Mode</span></button>
+                    <button id="darkModeBtn" class="file-option" title="Theme: Dark — click to change"><span id="darkModeIconWrap">🌙</span> <span id="darkModeLabel">Dark</span></button>
                 </div>
             </div>
             <div class="canvas-size-selector">
@@ -154,6 +173,7 @@
             <div class="tool-section">
                 <span class="section-label">Color</span>
                 <input type="color" id="colorPicker" value="#000000" class="color-picker" title="Color">
+                <div class="palette" id="palette" title="Saved colours — click to use, + to save the current colour"></div>
             </div>
 
             <div class="tool-divider"></div>
@@ -262,22 +282,6 @@
                 </button>
                 <button id="deleteFrameBtn" class="timeline-btn" title="Delete Frame">
                     <span class="icon">×</span>
-                </button>
-            </div>
-
-            <div class="control-group">
-                <button id="copyFrameBtn" class="timeline-btn" title="Copy Frame (Ctrl+C)">
-                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="4" y="1.5" width="8" height="10" rx="1.5"/>
-                        <path d="M7 14.5h5.5a2 2 0 0 0 0-4H9"/>
-                        <path d="M11 8.5l2 2-2 2"/>
-                    </svg>
-                </button>
-                <button id="pasteFrameBtn" class="timeline-btn" title="Paste Frame (Ctrl+V)">
-                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.5 2.5H12A1.5 1.5 0 0 1 13.5 4v9A1.5 1.5 0 0 1 12 14.5H4A1.5 1.5 0 0 1 2.5 13V4A1.5 1.5 0 0 1 4 2.5H5.5"/>
-                        <rect x="5.5" y="1" width="5" height="3" rx="1"/>
-                    </svg>
                 </button>
             </div>
 
@@ -482,5 +486,6 @@
     </div>
 
     <script src="main.js"></script>
+    <script src="onboarding.js"></script><!-- optional onboarding module; safe to remove with onboarding.css -->
 </body>
 </html>

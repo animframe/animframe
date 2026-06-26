@@ -1,0 +1,94 @@
+/* ============================================================================
+   AnimFrame — First-run onboarding (SELF-CONTAINED, OPTIONAL MODULE)
+   ----------------------------------------------------------------------------
+   To remove onboarding entirely, delete these three things — nothing else:
+     1. this file (onboarding.css)
+     2. onboarding.js
+     3. the two <link>/<script> tags for them in index.html
+   No changes to main.js or any other file are required. The app does not
+   depend on this module; it only hooks in from the outside.
+
+   All styles are namespaced .afob-* and reuse the app's design tokens, so
+   onboarding automatically matches the current theme (dark/light) and accent.
+   ============================================================================ */
+
+.afob-root { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+
+/* ---- first-run opt-in overlay + card ---- */
+.afob-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 11, 13, 0.42);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+.afob-overlay.afob-show { opacity: 1; pointer-events: auto; }
+.afob-card {
+  width: 340px; max-width: calc(100vw - 32px);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-lg);
+  padding: 22px; text-align: center;
+  transform: translateY(6px); transition: transform 0.25s ease;
+}
+.afob-overlay.afob-show .afob-card { transform: translateY(0); }
+.afob-cmark {
+  width: 40px; height: 40px; border-radius: 12px;
+  background: var(--accent); color: var(--on-accent, #fff);
+  display: grid; place-items: center; margin: 0 auto 14px;
+}
+.afob-h3 { margin: 0 0 6px; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; color: var(--text-primary); }
+.afob-p  { margin: 0 0 18px; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.afob-actions { display: flex; flex-direction: column; gap: 8px; }
+.afob-primary {
+  background: var(--accent); color: var(--on-accent, #fff); border: 0; font: inherit;
+  font-weight: 600; font-size: 13.5px; padding: 11px; border-radius: var(--r-md, 10px);
+  cursor: pointer; transition: background 0.14s ease;
+}
+.afob-primary:hover { background: var(--accent-hover); }
+.afob-secondary { background: transparent; color: var(--text-secondary); border: 0; font: inherit; font-weight: 550; font-size: 12.5px; padding: 6px; cursor: pointer; }
+.afob-secondary:hover { color: var(--text-primary); }
+
+/* ---- diegetic canvas prompt ("Draw here") ---- */
+.afob-prompt {
+  position: fixed; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  color: var(--text-tertiary); pointer-events: none;
+  opacity: 0; transition: opacity 0.25s ease; z-index: 8500;
+}
+.afob-prompt.afob-show { opacity: 1; }
+.afob-ring {
+  width: 62px; height: 62px; border-radius: 50%; border: 2px dashed var(--border-strong);
+  display: grid; place-items: center; animation: afob-breathe 3.2s ease-in-out infinite;
+}
+.afob-prompt span { font-size: 13px; font-weight: 500; letter-spacing: -0.01em; }
+@keyframes afob-breathe { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .afob-ring { animation: none; } }
+
+/* ---- nudge (sits beside a control, never blocks it) ---- */
+.afob-nudge {
+  position: fixed; z-index: 9001;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px); box-shadow: var(--shadow-lg);
+  padding: 10px 12px; display: flex; align-items: center; gap: 10px; max-width: 260px;
+  opacity: 0; transform: translateY(4px); transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none; /* never intercept drawing/clicks; only the skip link does */
+}
+.afob-nudge.afob-show { opacity: 1; transform: translateY(0); }
+.afob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.afob-msg { font-size: 12.5px; font-weight: 550; color: var(--text-primary); line-height: 1.35; }
+.afob-skip { font-size: 11.5px; color: var(--text-tertiary); cursor: pointer; margin-left: 2px; white-space: nowrap; pointer-events: auto; }
+.afob-skip:hover { color: var(--text-secondary); text-decoration: underline; }
+.afob-arrow {
+  position: absolute; width: 10px; height: 10px; background: var(--bg-surface);
+  border: 1px solid var(--border); transform: rotate(45deg);
+  bottom: -6px; left: calc(50% - 5px); border-top: 0; border-left: 0;
+}
+
+/* ---- completion flash ---- */
+.afob-done {
+  position: fixed; z-index: 9001; transform: translateX(-50%);
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--r-pill, 999px); box-shadow: var(--shadow-md);
+  padding: 8px 16px; font-size: 12.5px; font-weight: 600; color: var(--text-primary);
+  display: flex; align-items: center; gap: 8px; opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+}
+.afob-done.afob-show { opacity: 1; }
