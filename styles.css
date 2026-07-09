@@ -2588,7 +2588,10 @@ input:focus:not(:focus-visible) {
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 8px;
-    max-width: 132px;
+    max-width: 100%;
+    padding: 0 6px;          /* breathing room so swatches aren't flush to the screen edge */
+    box-sizing: border-box;
+    justify-content: center;
 }
 .swatch {
     position: relative;
@@ -2640,4 +2643,56 @@ input:focus:not(:focus-visible) {
 .swatch-add:hover {
     color: var(--text-primary);
     border-color: var(--accent);
+}
+.swatch-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: var(--bg-panel);
+    border-style: dashed;
+}
+.swatch-more:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* ==================== TABLET / TOUCH TOOLBAR (iPad etc.) ==================== */
+/* Scoped to touch devices at tablet width and up. Phones (<768px) and any
+   mouse/desktop pointer are unaffected, so this can't change the desktop layout. */
+@media (pointer: coarse) and (min-width: 768px) {
+    :root {
+        --tool-column-width: 108px; /* wider so the horizontal sliders are draggable by finger */
+    }
+    .tool-column {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+    .slider-section {
+        padding: 0 8px;
+        overflow: visible; /* don't clip the larger touch thumb */
+    }
+    .h-slider {
+        height: 6px;
+        margin: 10px 0;
+    }
+    .h-slider::-webkit-slider-thumb {
+        width: 24px;
+        height: 24px;
+    }
+    .h-slider::-moz-range-thumb {
+        width: 24px;
+        height: 24px;
+    }
+    .slider-label { font-size: 10px; }
+    .slider-val { font-size: 11px; }
+    .swatch,
+    .swatch-add,
+    .swatch-more {
+        width: 28px;
+        height: 28px;
+    }
 }

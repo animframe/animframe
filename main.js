@@ -3631,6 +3631,8 @@ var AF_PALETTE_KEY = 'animframe-palette';
 var AF_PALETTE_MAX = 24;
 var AF_PALETTE_DEFAULT = ['#000000', '#ffffff', '#9e9e9e', '#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#5e35b1', '#d81b60', '#6d4c41', '#00acc1'];
 var afPalette = [];
+var afPaletteExpanded = false;      // collapsed by default: show only AF_PALETTE_COLLAPSED swatches
+var AF_PALETTE_COLLAPSED = 4;       // how many swatches to show before the "more" arrow
 
 function afIsHexColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c); }
 function afNormHex(c) { return afIsHexColor(c) ? c.toLowerCase() : null; }
@@ -3654,12 +3656,19 @@ function renderPalette() {
     var el = document.getElementById('palette');
     if (!el) return;
     var active = (state.strokeColor || '').toLowerCase();
+    var hasMore = afPalette.length > AF_PALETTE_COLLAPSED;
+    var shown = afPaletteExpanded ? afPalette : afPalette.slice(0, AF_PALETTE_COLLAPSED);
     var html = '';
-    afPalette.forEach(function(c) {
+    shown.forEach(function(c) {
         var sel = c === active ? ' selected' : '';
         html += '<button type="button" class="swatch' + sel + '" data-color="' + c + '" title="' + c + '" style="background:' + c + '">' +
             '<span class="swatch-remove" title="Remove">\u00d7</span></button>';
     });
+    if (hasMore) {
+        var moreLabel = afPaletteExpanded ? '\u2039' : '\u203a'; // ‹ collapse : › expand
+        var moreTip = afPaletteExpanded ? 'Show fewer colours' : 'Show more colours';
+        html += '<button type="button" class="swatch swatch-more" title="' + moreTip + '" aria-expanded="' + afPaletteExpanded + '">' + moreLabel + '</button>';
+    }
     if (afPalette.length < AF_PALETTE_MAX) {
         html += '<button type="button" class="swatch swatch-add" title="Save current colour to palette">+</button>';
     }
@@ -3670,8 +3679,8 @@ function addCurrentColorToPalette() {
     var c = afNormHex(state.strokeColor);
     if (!c) return;
     if (afPalette.indexOf(c) !== -1) { renderPalette(); return; } // already saved
-    afPalette.push(c);
-    if (afPalette.length > AF_PALETTE_MAX) afPalette = afPalette.slice(-AF_PALETTE_MAX);
+    afPalette.unshift(c); // newest first, so a freshly saved colour is visible in the collapsed 4
+    if (afPalette.length > AF_PALETTE_MAX) afPalette = afPalette.slice(0, AF_PALETTE_MAX);
     savePalette();
     renderPalette();
 }
@@ -3702,6 +3711,8 @@ function setupPalette() {
     el.addEventListener('click', function(e) {
         var rm = e.target.closest ? e.target.closest('.swatch-remove') : null;
         if (rm) { var sw = rm.closest('.swatch'); if (sw) deleteSwatch(sw.getAttribute('data-color')); e.stopPropagation(); return; }
+        var more = e.target.closest ? e.target.closest('.swatch-more') : null;
+        if (more) { afPaletteExpanded = !afPaletteExpanded; renderPalette(); return; }
         var add = e.target.closest ? e.target.closest('.swatch-add') : null;
         if (add) { addCurrentColorToPalette(); return; }
         var swatch = e.target.closest ? e.target.closest('.swatch') : null;
