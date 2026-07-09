@@ -28,6 +28,7 @@ const state = {
     strokeColor: '#000000',
     smoothing: 3, // Smoothing amount (0.5 = low, 3 = medium, 8 = high)
     taper: 0, // Taper amount (0-100, 0 = uniform stroke, 100 = maximum taper)
+    pressureEnabled: true, // Pen pressure varies stroke width (toggle in bottom bar)
     backgroundColor: '#ffffff', // Global background color
     canvasWidth: 600, // Canvas width
     canvasHeight: 600, // Canvas height
@@ -95,6 +96,7 @@ function init() {
     setupEventListeners();
     setupKeyboardShortcuts();
     setupPalette();
+    setupPressure();
     loadFromLocalStorage();
     syncBackgroundUI(); // Sync UI with loaded state
     updateBackground(); // Set initial background
@@ -1382,9 +1384,9 @@ function startDrawing(e) {
         state.currentPath.setAttribute('fill', 'none');
         state.currentPath.setAttribute('stroke', state.strokeColor);
         
-        // Support pressure-sensitive input (Apple Pencil, etc.)
+        // Support pressure-sensitive input (Apple Pencil, etc.) when enabled
         const pressure = e.pressure || 0.5; // Default to 0.5 if no pressure data
-        const strokeWidth = state.strokeSize * (0.5 + pressure); // Scale by pressure
+        const strokeWidth = state.pressureEnabled ? state.strokeSize * (0.5 + pressure) : state.strokeSize;
         
         state.currentPath.setAttribute('stroke-width', strokeWidth);
         state.currentPath.setAttribute('stroke-linecap', 'round');
@@ -1484,7 +1486,7 @@ function draw(e) {
                 state.taper / 100
             );
             state.currentPath.setAttribute('d', pathData);
-        } else if (hasPressureVariation(state.currentPoints)) {
+        } else if (state.pressureEnabled && hasPressureVariation(state.currentPoints)) {
             // PRESSURE MODE: Use filled outline with pressure-based width
             if (state.currentPath.getAttribute('stroke') !== 'none') {
                 // Switch from stroked to filled path on first pressure detection
@@ -3719,6 +3721,35 @@ function setupPalette() {
         if (swatch && swatch.getAttribute('data-color')) selectSwatch(swatch.getAttribute('data-color'));
     });
     renderPalette();
+}
+
+// ==================== PEN PRESSURE ====================
+var AF_PRESSURE_KEY = 'animframe-pressure';
+
+function updatePressureButton() {
+    var btn = document.getElementById('pressureToggle');
+    if (!btn) return;
+    btn.classList.toggle('active', !!state.pressureEnabled);
+    btn.title = state.pressureEnabled ? 'Pen pressure: on' : 'Pen pressure: off';
+    btn.setAttribute('aria-pressed', state.pressureEnabled ? 'true' : 'false');
+}
+
+function togglePressure() {
+    state.pressureEnabled = !state.pressureEnabled;
+    try { localStorage.setItem(AF_PRESSURE_KEY, state.pressureEnabled ? '1' : '0'); } catch (e) { /* non-fatal */ }
+    updatePressureButton();
+}
+
+function setupPressure() {
+    // Load saved preference (default: on)
+    try {
+        var saved = localStorage.getItem(AF_PRESSURE_KEY);
+        if (saved === '0') state.pressureEnabled = false;
+        else if (saved === '1') state.pressureEnabled = true;
+    } catch (e) { /* keep default */ }
+    var btn = document.getElementById('pressureToggle');
+    if (btn) btn.addEventListener('click', togglePressure);
+    updatePressureButton();
 }
 
 function resetToDefault() {
