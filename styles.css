@@ -630,6 +630,25 @@ body {
     padding: var(--space-1) 0; /* Reduced from space-2 */
     gap: var(--space-1); /* Reduced from space-2 */
     flex-shrink: 0;
+    /* If the toolbar is taller than the screen, scroll within it instead of
+       clipping tools off the bottom (e.g. BG / Alpha on short/tablet screens). */
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;   /* momentum scroll on iOS */
+    overscroll-behavior: contain;        /* don't chain the scroll to the page */
+    scrollbar-width: thin;               /* slim scrollbar (Firefox) */
+    scrollbar-color: var(--border-strong) transparent;
+}
+.tool-column::-webkit-scrollbar {
+    width: 6px;
+}
+.tool-column::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: var(--r-pill);
+}
+.tool-column::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .tool-section {
