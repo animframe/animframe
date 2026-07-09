@@ -29,6 +29,7 @@ const state = {
     smoothing: 3, // Smoothing amount (0.5 = low, 3 = medium, 8 = high)
     taper: 0, // Taper amount (0-100, 0 = uniform stroke, 100 = maximum taper)
     pressureEnabled: true, // Pen pressure varies stroke width (toggle in bottom bar)
+    pressureSensitivity: 0.65, // 0..1, higher = thicker line with less pressure (future slider)
     backgroundColor: '#ffffff', // Global background color
     canvasWidth: 600, // Canvas width
     canvasHeight: 600, // Canvas height
@@ -1386,7 +1387,7 @@ function startDrawing(e) {
         
         // Support pressure-sensitive input (Apple Pencil, etc.) when enabled
         const pressure = e.pressure || 0.5; // Default to 0.5 if no pressure data
-        const strokeWidth = state.pressureEnabled ? state.strokeSize * (0.5 + pressure) : state.strokeSize;
+        const strokeWidth = state.pressureEnabled ? afPressureWidth(pressure, state.strokeSize) : state.strokeSize;
         
         state.currentPath.setAttribute('stroke-width', strokeWidth);
         state.currentPath.setAttribute('stroke-linecap', 'round');
@@ -1432,7 +1433,28 @@ function draw(e) {
     
     // Store event for shift key updates
     state.lastPointerEvent = e;
-    
+
+    // High-fidelity pen input: process the sub-samples the device coalesced into this
+    // event. Apple Pencil samples far faster than pointermove fires, so without this
+    // fast strokes lose points and feel coarse. We pre-add the intermediate samples
+    // (using the same min-distance filter as below); the final sample is handled after.
+    if (state.tool === 'pen' && !(state.shiftPressed || state.constraintMode) && e.getCoalescedEvents) {
+        var coalesced = e.getCoalescedEvents();
+        if (coalesced && coalesced.length > 1) {
+            for (var ci = 0; ci < coalesced.length - 1; ci++) {
+                var ce = coalesced[ci];
+                var cp = getSvgPoint(ce);
+                cp.pressure = ce.pressure || 0.5;
+                if (state.currentPoints.length > 0) {
+                    var lp = state.currentPoints[state.currentPoints.length - 1];
+                    var cd = Math.sqrt((cp.x - lp.x) * (cp.x - lp.x) + (cp.y - lp.y) * (cp.y - lp.y));
+                    if (cd < state.smoothing) continue;
+                }
+                state.currentPoints.push(cp);
+            }
+        }
+    }
+
     let point = getSvgPoint(e);
     point.pressure = e.pressure || 0.5;
     
@@ -1577,6 +1599,23 @@ function applyPointAveraging(points, smoothing) {
  * @param {number} taperAmount - Taper intensity (0.0 to 1.0)
  * @returns {number} - Calculated width at this position
  */
+// Map raw stylus pressure (0..1) to a stroke width. Tuned to be exaggerated and
+// easy: a comfortable medium press lands near the base size, with headroom well
+// above it for a firm press, and light touches still register. Sensitivity
+// (state.pressureSensitivity, 0..1) will later be exposed as a slider — higher
+// means the line thickens with less pressure.
+function afPressureWidth(pressure, baseWidth) {
+    var p = (pressure === undefined || pressure === null) ? 0.5 : pressure;
+    if (p < 0) p = 0; else if (p > 1) p = 1;
+    var sens = (typeof state.pressureSensitivity === 'number') ? state.pressureSensitivity : 0.65;
+    if (sens < 0) sens = 0; else if (sens > 1) sens = 1;
+    var minF = 0.4;          // thinnest, at the lightest touch (fraction of base size)
+    var maxF = 1.75;         // thickest, at full press — exaggerated headroom above base
+    var gamma = 1.4 - sens;  // higher sensitivity -> lower gamma -> thickness ramps in sooner
+    var shaped = Math.pow(p, gamma);
+    return baseWidth * (minF + (maxF - minF) * shaped);
+}
+
 function hasPressureVariation(points) {
     // Check if there's meaningful pressure variation (not all 0.5 from mouse)
     if (points.length < 4) return false;
@@ -1603,9 +1642,8 @@ function createPressurePath(points, baseWidth) {
         // Pressure: 0 = very light, 1 = full press
         var pressure = points[i].pressure !== undefined ? points[i].pressure : 0.5;
         
-        // Map pressure to width: light touch = thin, full press = thick
-        // Minimum 15% of base width, maximum 120%
-        var width = baseWidth * (0.15 + pressure * 1.05);
+        // Exaggerated, easy-to-reach response (see afPressureWidth)
+        var width = afPressureWidth(pressure, baseWidth);
         var halfWidth = width / 2;
         
         // Get tangent direction
