@@ -1434,27 +1434,6 @@ function draw(e) {
     // Store event for shift key updates
     state.lastPointerEvent = e;
 
-    // High-fidelity pen input: process the sub-samples the device coalesced into this
-    // event. Apple Pencil samples far faster than pointermove fires, so without this
-    // fast strokes lose points and feel coarse. We pre-add the intermediate samples
-    // (using the same min-distance filter as below); the final sample is handled after.
-    if (state.tool === 'pen' && !(state.shiftPressed || state.constraintMode) && e.getCoalescedEvents) {
-        var coalesced = e.getCoalescedEvents();
-        if (coalesced && coalesced.length > 1) {
-            for (var ci = 0; ci < coalesced.length - 1; ci++) {
-                var ce = coalesced[ci];
-                var cp = getSvgPoint(ce);
-                cp.pressure = ce.pressure || 0.5;
-                if (state.currentPoints.length > 0) {
-                    var lp = state.currentPoints[state.currentPoints.length - 1];
-                    var cd = Math.sqrt((cp.x - lp.x) * (cp.x - lp.x) + (cp.y - lp.y) * (cp.y - lp.y));
-                    if (cd < state.smoothing) continue;
-                }
-                state.currentPoints.push(cp);
-            }
-        }
-    }
-
     let point = getSvgPoint(e);
     point.pressure = e.pressure || 0.5;
     
